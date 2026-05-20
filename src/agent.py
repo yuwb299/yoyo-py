@@ -17,6 +17,7 @@ class AgentEvent(Enum):
     TOOL_END = "tool_end"      # Tool execution finished
     DONE = "done"              # Agent turn complete
     ERROR = "error"            # Error occurred
+    INTERRUPTED = "interrupted"  # User interrupted via Ctrl+C
 
 
 @dataclass
@@ -62,11 +63,16 @@ class Agent:
         self.tool_schemas = tool_schemas or []
         self.state = AgentState(max_tool_rounds=max_tool_rounds)
         self.verbose = verbose
+        self._interrupted = False  # Set to True by Ctrl+C to stop current turn
 
         if self.system_prompt:
             self.state.messages = [
                 {"role": "system", "content": self.system_prompt}
             ]
+
+    def interrupt(self) -> None:
+        """Signal the agent to stop the current turn (called from Ctrl+C handler)."""
+        self._interrupted = True
 
     def clear(self) -> None:
         """Reset conversation history."""
@@ -91,10 +97,16 @@ class Agent:
         - (TOOL_END, {name, output, is_error}) — tool finished
         - (DONE, Usage) — agent turn complete
         - (ERROR, str) — error message
+        - (INTERRUPTED, None) — user pressed Ctrl+C
         """
+        self._interrupted = False
         self.state.messages.append({"role": "user", "content": user_input})
 
         for round_num in range(self.state.max_tool_rounds):
+            if self._interrupted:
+                yield (AgentEvent.INTERRUPTED, None)
+                return
+
             try:
                 response = self.provider.chat(
                     messages=self.state.messages,
@@ -113,6 +125,10 @@ class Agent:
 
             try:
                 for chunk in response:
+                    # Check interrupt flag on every chunk
+                    if self._interrupted:
+                        break
+
                     # Accumulate usage from chunks
                     if hasattr(chunk, "usage") and chunk.usage:
                         round_usage.add(GLMProvider.parse_usage(chunk))
@@ -162,6 +178,19 @@ class Agent:
                 yield (AgentEvent.ERROR, f"Stream error: {e}")
                 return
 
+            # Handle interrupt: save what we have and stop
+            if self._interrupted:
+                self.state.usage.add(round_usage)
+                # Save partial assistant message so conversation stays consistent
+                assistant_msg: dict[str, Any] = {"role": "assistant"}
+                if assistant_content:
+                    assistant_msg["content"] = assistant_content + "\n[interrupted]"
+                else:
+                    assistant_msg["content"] = "[interrupted]"
+                self.state.messages.append(assistant_msg)
+                yield (AgentEvent.INTERRUPTED, None)
+                return
+
             self.state.usage.add(round_usage)
 
             # Build the assistant message
@@ -184,6 +213,10 @@ class Agent:
 
             # Execute tool calls
             for tc in tool_calls_list:
+                if self._interrupted:
+                    yield (AgentEvent.INTERRUPTED, None)
+                    return
+
                 tool_name = tc["function"]["name"]
                 tool_args_str = tc["function"]["arguments"]
                 tool_call_id = tc["id"]

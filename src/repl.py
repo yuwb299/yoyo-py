@@ -162,38 +162,55 @@ async def _run_agent_turn(agent: Agent, user_input: str) -> None:
     """Execute one agent turn and display results."""
     in_text = False
 
-    async for event_type, data in agent.prompt(user_input):
-        if event_type == AgentEvent.TEXT:
-            if not in_text:
-                print()
-                in_text = True
-            print(data, end="", flush=True)
+    # Set up Ctrl+C handler during agent execution
+    def _on_interrupt(sig, frame):
+        agent.interrupt()
 
-        elif event_type == AgentEvent.TOOL_START:
-            if in_text:
-                print()
-                in_text = False
-            name = data["name"]
-            args = data["args"]
-            summary = _tool_summary(name, args)
-            print(f"{YELLOW}  ▶ {summary}{RESET}", end="", flush=True)
+    import signal
+    old_handler = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, _on_interrupt)
 
-        elif event_type == AgentEvent.TOOL_END:
-            if data["is_error"]:
-                print(f" {RED}✗{RESET}")
-            else:
-                print(f" {GREEN}✓{RESET}")
+    try:
+        async for event_type, data in agent.prompt(user_input):
+            if event_type == AgentEvent.TEXT:
+                if not in_text:
+                    print()
+                    in_text = True
+                print(data, end="", flush=True)
 
-        elif event_type == AgentEvent.DONE:
-            if in_text:
-                print()
-            print_usage(data)
-            print()
+            elif event_type == AgentEvent.TOOL_START:
+                if in_text:
+                    print()
+                    in_text = False
+                name = data["name"]
+                args = data["args"]
+                summary = _tool_summary(name, args)
+                print(f"{YELLOW}  ▶ {summary}{RESET}", end="", flush=True)
 
-        elif event_type == AgentEvent.ERROR:
-            if in_text:
+            elif event_type == AgentEvent.TOOL_END:
+                if data["is_error"]:
+                    print(f" {RED}✗{RESET}")
+                else:
+                    print(f" {GREEN}✓{RESET}")
+
+            elif event_type == AgentEvent.DONE:
+                if in_text:
+                    print()
+                print_usage(data)
                 print()
-            print(f"\n{RED}  ✗ {data}{RESET}\n")
+
+            elif event_type == AgentEvent.INTERRUPTED:
+                if in_text:
+                    print()
+                print(f"\n{YELLOW}  ⏸ interrupted — press Enter to continue{RESET}\n")
+
+            elif event_type == AgentEvent.ERROR:
+                if in_text:
+                    print()
+                print(f"\n{RED}  ✗ {data}{RESET}\n")
+    finally:
+        # Restore previous SIGINT handler
+        signal.signal(signal.SIGINT, old_handler)
 
     if in_text:
         print()

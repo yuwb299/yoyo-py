@@ -61,3 +61,20 @@ class TestAgent:
     def test_max_tool_rounds_custom(self):
         agent = Agent(provider=None, max_tool_rounds=5)
         assert agent.state.max_tool_rounds == 5
+
+    def test_interrupt_flag(self):
+        agent = Agent(provider=None)
+        assert not agent._interrupted
+        agent.interrupt()
+        assert agent._interrupted
+
+    def test_interrupt_resets_on_prompt(self):
+        """_interrupted should be reset when a new prompt starts."""
+        agent = Agent(provider=None)
+        agent.interrupt()
+        assert agent._interrupted
+        # We can't easily run prompt() without a provider, but we verify
+        # the reset logic by checking the prompt method source sets it to False
+        import inspect
+        source = inspect.getsource(agent.prompt)
+        assert "self._interrupted = False" in source
