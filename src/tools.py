@@ -475,11 +475,16 @@ TOOL_FUNCTIONS = {
 # ─── Helpers ─────────────────────────────────────────────────────────
 
 def _truncate(text: str, max_bytes: int = 50000) -> str:
-    """Truncate text to approximate byte limit."""
+    """Truncate text to approximate byte limit, preserving valid UTF-8."""
     encoded = text.encode("utf-8")
     if len(encoded) <= max_bytes:
         return text
-    return encoded[:max_bytes].decode("utf-8", errors="replace") + f"\n... [truncated, {len(encoded)} bytes total]"
+    # Walk back from the cut point to find a valid UTF-8 boundary
+    # so we don't split multi-byte characters
+    cut = max_bytes
+    while cut > 0 and (encoded[cut] & 0xC0) == 0x80:
+        cut -= 1
+    return encoded[:cut].decode("utf-8") + f"\n... [truncated, {len(encoded)} bytes total]"
 
 
 def _is_binary(path: Path) -> bool:
