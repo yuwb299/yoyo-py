@@ -59,16 +59,17 @@ def _classify_api_error(error: Exception) -> APIError:
             category="auth",
             retryable=False,
         )
+    elif isinstance(error, APITimeoutError):
+        # Must check before APIConnectionError since APITimeoutError inherits from it
+        return APIError(
+            f"Request timed out: {error}",
+            category="timeout",
+            retryable=True,
+        )
     elif isinstance(error, APIConnectionError):
         return APIError(
             f"Connection error: {error}",
             category="connection",
-            retryable=True,
-        )
-    elif isinstance(error, APITimeoutError):
-        return APIError(
-            f"Request timed out: {error}",
-            category="timeout",
             retryable=True,
         )
     elif isinstance(error, BadRequestError):
