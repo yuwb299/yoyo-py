@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
-from .provider import GLMProvider, Usage
+from .provider import APIError, GLMProvider, Usage
 
 
 class AgentEvent(Enum):
@@ -113,8 +113,21 @@ class Agent:
                     tools=self.tool_schemas if self.tool_schemas else None,
                     stream=True,
                 )
+            except APIError as e:
+                # Provide actionable hints based on error category
+                hint = ""
+                if e.category == "rate_limit":
+                    hint = " (rate limited — wait a moment and try again)"
+                elif e.category == "auth":
+                    hint = " (check your API key in .env)"
+                elif e.category == "connection":
+                    hint = " (network issue — check your internet connection)"
+                elif e.category == "timeout":
+                    hint = " (request timed out — try a shorter prompt)"
+                yield (AgentEvent.ERROR, f"{e}{hint}")
+                return
             except Exception as e:
-                yield (AgentEvent.ERROR, str(e))
+                yield (AgentEvent.ERROR, f"Unexpected error: {e}")
                 return
 
             # Collect the full assistant message from the stream
