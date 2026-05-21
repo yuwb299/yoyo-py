@@ -255,6 +255,20 @@ class Agent:
                                 "content": str(result),
                             }
                         )
+                    except TypeError as e:
+                        # Missing or wrong arguments — common when LLM sends malformed JSON
+                        error_msg = f"Error executing {tool_name}: {e} (args received: {tool_args})"
+                        yield (
+                            AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": error_msg, "is_error": True},
+                        )
+                        self.state.messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call_id,
+                                "content": error_msg,
+                            }
+                        )
                     except Exception as e:
                         error_msg = f"Error executing {tool_name}: {e}"
                         yield (
