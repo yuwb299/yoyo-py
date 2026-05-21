@@ -6,21 +6,22 @@
 - [x] GLM 5 provider via OpenAI-compatible API
 - [x] Skills system with YAML frontmatter
 - [x] Colored tool feedback
-- [ ] Add unit tests for all tools
-- [ ] Add integration test for agent loop
-- [ ] Graceful error handling (API errors, rate limits, timeouts)
-- [ ] Ctrl+C handling to interrupt agent responses
+- [x] Add unit tests for all tools (Day 1)
+- [x] Add integration test for agent loop (Day 1)
+- [x] Graceful error handling (API errors, rate limits, timeouts) (Day 1)
+- [x] Ctrl+C handling to interrupt agent responses
 
 ## Level 2: Awareness (Day 8–21)
-- [ ] Token usage tracking per turn and per session
-- [ ] `/model` command to switch models mid-session
+- [x] Token usage tracking per turn and per session
+- [x] `/model` command to switch models mid-session
+- [x] `/status` command with model, git branch, tokens
 - [ ] `/diff` — show git diff summary
 - [ ] `/commit` — AI-generated commit messages
-- [ ] `/status` command with model, git branch, tokens
 - [ ] Multi-line input support (backslash continuation)
 - [ ] Session save/load (`/save`, `/load`)
 - [ ] Auto-compact when context gets too long
 - [ ] Git-aware context (recently changed files in system prompt)
+- [ ] REPL tests (slash commands, pipe input, error display)
 
 ## Level 3: Competence (Day 22–42)
 - [ ] `/health` — run build/test/lint diagnostics
