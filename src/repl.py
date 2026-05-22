@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from .agent import Agent, AgentEvent
 from .provider import GLMProvider
@@ -168,6 +170,32 @@ async def run_repl(
                     continue
                 print(_git_commit(msg))
                 print()
+                continue
+            elif cmd.startswith("/save"):
+                # Save session to a file
+                save_path = line[5:].strip() if len(line) > 5 else ""
+                if not save_path:
+                    # Default save location
+                    save_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
+                print(_save_session(save_path, agent.state.messages, provider.model))
+                print()
+                continue
+            elif cmd.startswith("/load"):
+                # Load session from a file
+                load_path = line[5:].strip() if len(line) > 5 else ""
+                if not load_path:
+                    load_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
+                result = _load_session(load_path)
+                if result is None:
+                    print(f"{RED}  Failed to load session from {load_path}{RESET}")
+                    print(f"{DIM}  File may not exist or be invalid{RESET}\n")
+                    continue
+                messages, model = result
+                agent.state.messages = messages
+                provider.model = model
+                msg_count = len([m for m in messages if m.get("role") != "system"])
+                print(f"{GREEN}  Session loaded from {load_path}{RESET}")
+                print(f"{DIM}  {msg_count} messages, model: {model}{RESET}\n")
                 continue
             else:
                 print(f"{DIM}  Unknown command: {line}{RESET}\n")
@@ -476,6 +504,58 @@ def _git_commit(message: str) -> str:
     return commit.stdout.strip()
 
 
+def _save_session(filepath: str, messages: list[dict], model: str) -> str:
+    """Save conversation session to a JSON file.
+
+    Args:
+        filepath: Path to save the session file.
+        messages: The conversation messages to save.
+        model: The current model name.
+
+    Returns a human-readable result message.
+    """
+    from datetime import datetime
+
+    try:
+        p = Path(filepath)
+        p.parent.mkdir(parents=True, exist_ok=True)
+
+        data = {
+            "version": 1,
+            "timestamp": datetime.now().isoformat(),
+            "model": model,
+            "messages": messages,
+        }
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        return f"[OK] Session saved to {filepath} ({len(messages)} messages)"
+    except Exception as e:
+        return f"[ERROR] Failed to save session: {e}"
+
+
+def _load_session(filepath: str) -> tuple[list[dict], str] | None:
+    """Load a conversation session from a JSON file.
+
+    Args:
+        filepath: Path to the session file.
+
+    Returns (messages, model) tuple, or None on failure.
+    """
+    try:
+        p = Path(filepath)
+        if not p.exists():
+            return None
+
+        data = json.loads(p.read_text(encoding="utf-8"))
+
+        # Validate required fields
+        if "messages" not in data or "model" not in data:
+            return None
+
+        return (data["messages"], data["model"])
+    except (json.JSONDecodeError, Exception):
+        return None
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -485,6 +565,8 @@ def _print_help() -> None:
     {CYAN}/model <name>{RESET}   Switch model (clears history)
     {CYAN}/diff{RESET}           Show git diff summary
     {CYAN}/commit <msg>{RESET}   Stage all and commit
+    {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
+    {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info
