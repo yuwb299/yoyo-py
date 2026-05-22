@@ -44,6 +44,11 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
         "You respond in the same language the user uses.",
     ]
 
+    # Add git context (branch, recently changed files)
+    git_ctx = _git_context()
+    if git_ctx:
+        parts.append(git_ctx)
+
     # Load YOYO.md or CLAUDE.md if present
     for ctx_file in ("YOYO.md", "CLAUDE.md"):
         ctx_path = os.path.join(os.getcwd(), ctx_file)
@@ -289,6 +294,66 @@ def _truncate_str(s: str, max_len: int) -> str:
     if len(s) <= max_len:
         return s
     return s[:max_len] + "..."
+
+
+def _git_context() -> str:
+    """Collect git context for the system prompt: branch and recently changed files.
+
+    Returns a formatted string for the system prompt, or empty string if not in a git repo.
+    This helps the agent understand what files the user has been working on recently.
+    """
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return ""
+
+    # Get current branch name
+    branch_result = _run_git("branch", "--show-current")
+    if branch_result.returncode == 0 and branch_result.stdout.strip():
+        branch = branch_result.stdout.strip()
+    else:
+        # Detached HEAD — show short commit hash instead
+        head_result = _run_git("rev-parse", "--short", "HEAD")
+        branch = head_result.stdout.strip() if head_result.returncode == 0 else "detached"
+
+    # Get recently changed files (modified + untracked)
+    changed_files = []
+    diff_result = _run_git("diff", "--name-only")
+    if diff_result.returncode == 0 and diff_result.stdout.strip():
+        changed_files.extend(diff_result.stdout.strip().splitlines())
+
+    # Staged changes too
+    diff_cached = _run_git("diff", "--cached", "--name-only")
+    if diff_cached.returncode == 0 and diff_cached.stdout.strip():
+        for f in diff_cached.stdout.strip().splitlines():
+            if f not in changed_files:
+                changed_files.append(f)
+
+    # Untracked files
+    untracked = _run_git("ls-files", "--others", "--exclude-standard")
+    if untracked.returncode == 0 and untracked.stdout.strip():
+        for f in untracked.stdout.strip().splitlines():
+            if f not in changed_files:
+                changed_files.append(f)
+
+    # Build context string
+    lines = [f"\n# Git Context\nBranch: {branch}"]
+    if changed_files:
+        lines.append("Recently changed files:")
+        for f in changed_files[:20]:  # Limit to 20 files to avoid bloating the prompt
+            lines.append(f"  {f}")
+        if len(changed_files) > 20:
+            lines.append(f"  ... and {len(changed_files) - 20} more")
+
+    return "\n".join(lines)
 
 
 def _git_diff_summary() -> str:
