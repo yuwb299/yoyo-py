@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import subprocess
 import sys
 
 from .agent import Agent, AgentEvent
@@ -150,6 +151,10 @@ async def run_repl(
                 print(f"{DIM}  tokens: {agent.state.usage}{RESET}")
                 print(f"{DIM}  skills: {skills.count()}{RESET}\n")
                 continue
+            elif cmd == "/diff":
+                print(_git_diff_summary())
+                print()
+                continue
             else:
                 print(f"{DIM}  Unknown command: {line}{RESET}\n")
                 continue
@@ -277,6 +282,82 @@ def _truncate_str(s: str, max_len: int) -> str:
     return s[:max_len] + "..."
 
 
+def _git_diff_summary() -> str:
+    """Generate a summary of git changes (staged + unstaged).
+
+    Returns a human-readable summary or error message.
+    """
+    # Status labels for name-status output
+    STATUS_LABELS = {
+        "M": "modified",
+        "A": "added",
+        "D": "deleted",
+        "R": "renamed",
+        "C": "copied",
+        "T": "typechange",
+    }
+
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[Not a git repo]"
+
+    # Get unstaged changes
+    unstaged = _run_git("diff", "--name-status")
+    # Get staged changes
+    staged = _run_git("diff", "--cached", "--name-status")
+
+    if unstaged.returncode != 0 or staged.returncode != 0:
+        return f"[ERROR] git diff failed"
+
+    unstaged_output = unstaged.stdout.strip()
+    staged_output = staged.stdout.strip()
+
+    if not unstaged_output and not staged_output:
+        return "[No changes — working tree clean]"
+
+    lines = []
+
+    # Parse unstaged
+    if unstaged_output:
+        lines.append(f"{BOLD}Unstaged changes:{RESET}")
+        for entry in unstaged_output.splitlines():
+            parts = entry.split("\t", 1)
+            if len(parts) == 2:
+                status, path = parts
+                label = STATUS_LABELS.get(status, status)
+                lines.append(f"  {YELLOW}{label}{RESET}  {path}")
+            else:
+                lines.append(f"  {entry}")
+
+    # Parse staged
+    if staged_output:
+        lines.append(f"{BOLD}Staged changes:{RESET}")
+        for entry in staged_output.splitlines():
+            parts = entry.split("\t", 1)
+            if len(parts) == 2:
+                status, path = parts
+                label = STATUS_LABELS.get(status, status)
+                lines.append(f"  {GREEN}{label}{RESET}  {path}")
+            else:
+                lines.append(f"  {entry}")
+
+    # Add diff stat
+    stat = _run_git("diff", "--stat")
+    if stat.returncode == 0 and stat.stdout.strip():
+        lines.append(f"\n{DIM}{stat.stdout.strip()}{RESET}")
+
+    return "\n".join(lines)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -284,6 +365,7 @@ def _print_help() -> None:
     {CYAN}/clear{RESET}          Clear conversation history
     {CYAN}/help{RESET}           Show this help
     {CYAN}/model <name>{RESET}   Switch model (clears history)
+    {CYAN}/diff{RESET}           Show git diff summary
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info
