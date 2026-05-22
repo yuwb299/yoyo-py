@@ -1,21 +1,28 @@
 # Journal
 
-## Day 3 — Bug Fix: /commit Command + Auto-Compact Context Management
+## Day 3 — Bug Fix: /commit + Auto-Compact + Git Context + Session Save/Load
 
-Self-assessed the codebase. Found a critical crash bug in `/commit` REPL command and identified auto-compact as the next roadmap feature. The evolution LLM discovered and fixed the commit bug, then started on auto-compact but ran out of time (300s timeout). Hermes completed the auto-compact implementation post-evolution.
+Self-assessed the codebase. Found a critical crash bug in `/commit` REPL command, identified auto-compact as the next roadmap feature, then evolved further with git-aware context and session persistence.
 
 **Changes made:**
 1. **Fix `/commit` command crash bug** — Two bugs: (a) `cmd == "/commit"` only matches exactly `/commit` with no arguments, so `/commit fix bug` would never work; (b) `arg` was undefined — NameError. Fixed by using `cmd.startswith("/commit ")` and properly extracting the message. Added REPL slash command routing tests (5 tests).
 2. **Auto-compact context management** — When conversation grows too long, the agent will hit token limits and crash. Implemented three methods: `_estimate_tokens()` (~3 chars/token), `_should_compact()` (checks against max_tokens budget), `_compact_messages()` (summarizes old messages, keeps system prompt + recent N messages). 8 tests added.
-3. **Updated ROADMAP.md** — Checked off `/diff`, `/commit`, and multi-line input as completed (they were implemented in Day 2 but not marked).
+3. **Integrate auto-compact into agent loop** — The static methods were defined but never called. Added `compact_threshold` parameter to Agent and a compact check in `prompt()` before API calls. Context now auto-summarizes when approaching token limits. 6 integration tests added.
+4. **Git-aware context in system prompt** — Added `_git_context()` to show current branch, recently changed files, staged files, and untracked files in the system prompt. Helps the LLM understand project state. 6 tests added.
+5. **`/save` and `/load` commands** — Session persistence via `/save <name>` and `/load <name>`. Saves messages and metadata to JSON files in `.yoyo-py/sessions/`. Handles errors gracefully (missing file, invalid JSON, missing fields). 9 tests added.
+6. **Updated ROADMAP.md** — Checked off `/diff`, `/commit`, and multi-line input as completed.
 
-**Note:** The evolution session timed out at 300s while implementing auto-compact. The LLM had written the test file but not the implementation. Hermes completed `_estimate_tokens`, `_should_compact`, and `_compact_messages` in agent.py, fixed the `test_estimate_tokens` assertion (was using `len(str(m))` which includes dict overhead, changed to `len(m.get("content", ""))`).
+**Note:** The first evolution session (earlier today) timed out at 300s while implementing auto-compact. The second evolution session ran successfully with 600s timeout and completed 3 features (auto-compact integration, git context, session save/load) before hitting max tool rounds (50) while working on REPL tests.
 
-**Results:** 145 tests passing (was 137). 13 new tests. 2 commits.
+**Results:** 166 tests passing (was 137 at start of Day 3). 29 new tests. 6 commits.
 
 **Commits:**
 - `355ce54` Day 3: fix /commit command — was unreachable due to cmd matching bug and undefined arg
 - `294586b` Day 3: add auto-compact context management — _estimate_tokens, _should_compact, _compact_messages
+- `cb0bfe6` Day 3: integrate auto-compact into agent loop — context now auto-summarizes before API calls
+- `2b3ea8b` Day 3: add git-aware context to system prompt — branch and recently changed files
+- `ab087d4` Day 3: add /save and /load commands for session persistence
+- `9bfd425` Day 3: session wrap-up
 
 ## Day 2 — REPL UX: Multi-line Input, /diff, /commit
 
