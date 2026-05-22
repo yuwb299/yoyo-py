@@ -104,7 +104,7 @@ async def run_repl(
     # Interactive loop
     while True:
         try:
-            line = input(f"{BOLD}{GREEN}> {RESET}")
+            line = _read_multiline_input()
         except (EOFError, KeyboardInterrupt):
             print(f"\n{DIM}  bye 👋{RESET}\n")
             break
@@ -237,6 +237,38 @@ def _tool_summary(name: str, args: dict) -> str:
         path = args.get("path", ".")
         return f"ls {path}"
     return name
+
+
+def _read_multiline_input() -> str:
+    """Read user input with backslash continuation support.
+
+    Lines ending with '\\' are continued on the next line.
+    The backslash and trailing newline are replaced with a single newline.
+    """
+    PROMPT_FIRST = f"{BOLD}{GREEN}> {RESET}"
+    PROMPT_CONT = f"{BOLD}{GREEN}... {RESET}"
+
+    try:
+        line = input(PROMPT_FIRST)
+    except (EOFError, KeyboardInterrupt):
+        raise
+
+    # Strip only the trailing newline that input() includes; preserve leading whitespace
+    lines = []
+    while True:
+        if line.endswith("\\"):
+            # Remove the trailing backslash, continue to next line
+            lines.append(line[:-1])
+            try:
+                line = input(PROMPT_CONT)
+            except (EOFError, KeyboardInterrupt):
+                # If interrupted during continuation, return what we have so far
+                break
+        else:
+            lines.append(line)
+            break
+
+    return "\n".join(lines)
 
 
 def _truncate_str(s: str, max_len: int) -> str:
