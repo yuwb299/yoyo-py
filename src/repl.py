@@ -155,6 +155,14 @@ async def run_repl(
                 print(_git_diff_summary())
                 print()
                 continue
+            elif cmd == "/commit":
+                msg = arg.strip() if arg else ""
+                if not msg:
+                    print(f"{YELLOW}Usage: /commit <message>{RESET}\n")
+                    continue
+                print(_git_commit(msg))
+                print()
+                continue
             else:
                 print(f"{DIM}  Unknown command: {line}{RESET}\n")
                 continue
@@ -358,6 +366,50 @@ def _git_diff_summary() -> str:
     return "\n".join(lines)
 
 
+def _git_commit(message: str) -> str:
+    """Stage all changes and commit with the given message.
+
+    Args:
+        message: The commit message.
+
+    Returns a human-readable result or error message.
+    """
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[ERROR] Not a git repo"
+
+    # Check for changes (staged or unstaged)
+    diff = _run_git("diff", "--name-status")
+    diff_cached = _run_git("diff", "--cached", "--name-status")
+
+    if diff.returncode != 0 or diff_cached.returncode != 0:
+        return f"[ERROR] git diff failed: {diff.stderr.strip()}"
+
+    if not diff.stdout.strip() and not diff_cached.stdout.strip():
+        return "[No changes to commit]"
+
+    # Stage all changes
+    add = _run_git("add", "-A")
+    if add.returncode != 0:
+        return f"[ERROR] git add failed: {add.stderr.strip()}"
+
+    # Commit
+    commit = _run_git("commit", "-m", message)
+    if commit.returncode != 0:
+        return f"[ERROR] Commit failed: {commit.stderr.strip()}"
+
+    return commit.stdout.strip()
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -366,6 +418,7 @@ def _print_help() -> None:
     {CYAN}/help{RESET}           Show this help
     {CYAN}/model <name>{RESET}   Switch model (clears history)
     {CYAN}/diff{RESET}           Show git diff summary
+    {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info

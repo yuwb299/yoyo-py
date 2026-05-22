@@ -27,7 +27,8 @@ class TestGitCommit:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = [
                 _mock_completed(returncode=0, stdout="true\n"),  # rev-parse
-                _mock_completed(returncode=1, stdout=""),         # git diff (no changes)
+                _mock_completed(returncode=0, stdout=""),         # git diff (no changes)
+                _mock_completed(returncode=0, stdout=""),         # git diff --cached (no changes)
             ]
             result = _git_commit("test message")
         assert "no changes" in result.lower()
@@ -38,6 +39,7 @@ class TestGitCommit:
             mock_run.side_effect = [
                 _mock_completed(returncode=0, stdout="true\n"),                    # rev-parse
                 _mock_completed(returncode=0, stdout="M\tsrc/agent.py\n"),         # diff --name-status
+                _mock_completed(returncode=0, stdout=""),                          # diff --cached --name-status
                 _mock_completed(returncode=0, stdout=""),                          # git add -A
                 _mock_completed(returncode=0,                                      # git commit
                                 stdout="[main abc1234] test message\n 1 file changed, 2 insertions(+)\n"),
@@ -51,6 +53,7 @@ class TestGitCommit:
             mock_run.side_effect = [
                 _mock_completed(returncode=0, stdout="true\n"),   # rev-parse
                 _mock_completed(returncode=0, stdout="M\tf.py\n"),  # diff --name-status
+                _mock_completed(returncode=0, stdout=""),          # diff --cached --name-status
                 _mock_completed(returncode=0, stdout=""),          # git add -A
                 _mock_completed(returncode=1, stderr="empty commit message"),  # git commit fails
             ]
