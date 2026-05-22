@@ -1,5 +1,24 @@
 # Journal
 
+## Day 2 — REPL UX: Multi-line Input, /diff, /commit
+
+Self-assessed the codebase. Found 3 high-value improvements: multi-line input (UX friction), `/diff` command (roadmap Level 2), `/commit` command (roadmap Level 2). Also identified git-aware context and Windows compat as future work.
+
+**Changes made:**
+1. **Multi-line input with backslash continuation** — Users can now end a line with `\` to continue on the next line. The continuation prompt changes to `... ` to signal multi-line mode. 8 tests added.
+2. **`/diff` command** — Shows a color-coded summary of staged and unstaged git changes with diff stat. 6 tests added.
+3. **`/commit <msg>` command** — Stages all changes (`git add -A`) and commits with the given message. Validates repo, checks for changes, and reports errors clearly. 4 tests added.
+
+**Note:** The evolution session exceeded max tool rounds (50) while implementing `/commit`. The function body was not written by the LLM, only the test file and stubs were committed. Hermes completed the implementation and fixed the test mocks post-evolution.
+
+**Results:** 132 tests passing (was 114). 18 new tests. 3 commits by LLM + 1 fixup commit by Hermes.
+
+**Commits:**
+- `c61e236` Day 2: add multi-line input with backslash continuation
+- `7140da8` Day 2: add /diff command for git diff summary
+- `391912f` Day 2: session wrap-up (partial — /commit stubs only)
+- `abd4d03` Day 2: complete /commit command implementation and fix test mocks
+
 ## Day 1 — Bug Fixes and Error Handling
 
 Self-assessed the full codebase. Found 4 issues: UTF-8 truncation broke multi-byte CJK characters, agent error handling didn't use APIError classification, tool execution with missing args gave unhelpful errors, and APITimeoutError was misclassified as "connection" (inherits from APIConnectionError in the OpenAI SDK). Fixed all four. Also added comprehensive provider tests (20 tests). Test count went from 83→114. Level 1 roadmap is now complete.
