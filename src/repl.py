@@ -155,8 +155,9 @@ async def run_repl(
                 print(_git_diff_summary())
                 print()
                 continue
-            elif cmd == "/commit":
-                msg = arg.strip() if arg else ""
+            elif cmd.startswith("/commit"):
+                # Extract everything after "/commit " as the message
+                msg = line[7:].strip() if len(line) > 7 else ""
                 if not msg:
                     print(f"{YELLOW}Usage: /commit <message>{RESET}\n")
                     continue
