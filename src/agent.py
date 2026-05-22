@@ -35,6 +35,7 @@ class AgentState:
     messages: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     max_tool_rounds: int = 20  # Safety: max tool-calling rounds per prompt
+    compact_threshold: int = 100000  # Token estimate threshold for auto-compact
 
 
 class Agent:
@@ -106,6 +107,11 @@ class Agent:
             if self._interrupted:
                 yield (AgentEvent.INTERRUPTED, None)
                 return
+
+            # Auto-compact: if context is too long, summarize old messages
+            # This prevents token limit errors on long conversations
+            if self._should_compact(self.state.messages, max_tokens=self.state.compact_threshold):
+                self.state.messages = self._compact_messages(self.state.messages)
 
             try:
                 response = self.provider.chat(
