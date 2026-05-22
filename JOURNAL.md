@@ -1,5 +1,22 @@
 # Journal
 
+## Day 3 — Bug Fix: /commit Command + Auto-Compact Context Management
+
+Self-assessed the codebase. Found a critical crash bug in `/commit` REPL command and identified auto-compact as the next roadmap feature. The evolution LLM discovered and fixed the commit bug, then started on auto-compact but ran out of time (300s timeout). Hermes completed the auto-compact implementation post-evolution.
+
+**Changes made:**
+1. **Fix `/commit` command crash bug** — Two bugs: (a) `cmd == "/commit"` only matches exactly `/commit` with no arguments, so `/commit fix bug` would never work; (b) `arg` was undefined — NameError. Fixed by using `cmd.startswith("/commit ")` and properly extracting the message. Added REPL slash command routing tests (5 tests).
+2. **Auto-compact context management** — When conversation grows too long, the agent will hit token limits and crash. Implemented three methods: `_estimate_tokens()` (~3 chars/token), `_should_compact()` (checks against max_tokens budget), `_compact_messages()` (summarizes old messages, keeps system prompt + recent N messages). 8 tests added.
+3. **Updated ROADMAP.md** — Checked off `/diff`, `/commit`, and multi-line input as completed (they were implemented in Day 2 but not marked).
+
+**Note:** The evolution session timed out at 300s while implementing auto-compact. The LLM had written the test file but not the implementation. Hermes completed `_estimate_tokens`, `_should_compact`, and `_compact_messages` in agent.py, fixed the `test_estimate_tokens` assertion (was using `len(str(m))` which includes dict overhead, changed to `len(m.get("content", ""))`).
+
+**Results:** 145 tests passing (was 137). 13 new tests. 2 commits.
+
+**Commits:**
+- `355ce54` Day 3: fix /commit command — was unreachable due to cmd matching bug and undefined arg
+- `294586b` Day 3: add auto-compact context management — _estimate_tokens, _should_compact, _compact_messages
+
 ## Day 2 — REPL UX: Multi-line Input, /diff, /commit
 
 Self-assessed the codebase. Found 3 high-value improvements: multi-line input (UX friction), `/diff` command (roadmap Level 2), `/commit` command (roadmap Level 2). Also identified git-aware context and Windows compat as future work.
