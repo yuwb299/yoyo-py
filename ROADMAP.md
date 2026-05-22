@@ -15,9 +15,9 @@
 - [x] Token usage tracking per turn and per session
 - [x] `/model` command to switch models mid-session
 - [x] `/status` command with model, git branch, tokens
-- [ ] `/diff` — show git diff summary
-- [ ] `/commit` — AI-generated commit messages
-- [ ] Multi-line input support (backslash continuation)
+- [x] `/diff` — show git diff summary (Day 2)
+- [x] `/commit` — stage all and commit with message (Day 2, bug fixed Day 3)
+- [x] Multi-line input support (backslash continuation) (Day 2)
 - [ ] Session save/load (`/save`, `/load`)
 - [ ] Auto-compact when context gets too long
 - [ ] Git-aware context (recently changed files in system prompt)

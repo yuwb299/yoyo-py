@@ -298,3 +298,62 @@ class Agent:
 
         # Safety: exceeded max rounds
         yield (AgentEvent.ERROR, f"Exceeded max tool rounds ({self.state.max_tool_rounds})")
+
+    # ── Context auto-compaction ──────────────────────────────────────
+
+    @staticmethod
+    def _estimate_tokens(messages: list[dict[str, Any]]) -> int:
+        """Rough token estimate: ~3 chars per token (conservative for mixed text)."""
+        total_chars = sum(len(m.get("content", "")) for m in messages)
+        return max(total_chars // 3, 1) if total_chars else 0
+
+    @staticmethod
+    def _should_compact(messages: list[dict[str, Any]], max_tokens: int = 100000) -> bool:
+        """Return True if the message list exceeds the token budget."""
+        return Agent._estimate_tokens(messages) > max_tokens
+
+    @staticmethod
+    def _compact_messages(
+        messages: list[dict[str, Any]],
+        keep_recent: int = 4,
+    ) -> list[dict[str, Any]]:
+        """Compact old messages into a summary, keeping system + recent messages.
+
+        Strategy:
+        - Always keep the system prompt (first message if role=="system")
+        - Keep the last *keep_recent* non-system messages
+        - Replace older messages with a single summary
+        """
+        if not messages:
+            return messages
+
+        # Separate system prompt from the rest
+        system_msgs = []
+        rest = list(messages)
+        if rest and rest[0].get("role") == "system":
+            system_msgs = [rest.pop(0)]
+
+        # If all messages are "recent", nothing to compact
+        if len(rest) <= keep_recent:
+            return system_msgs + rest
+
+        # Split into old (to summarize) and recent (to keep)
+        old = rest[:-keep_recent]
+        recent = rest[-keep_recent:]
+
+        # Build a simple summary of old messages
+        summary_parts = []
+        for m in old:
+            role = m.get("role", "unknown")
+            content = m.get("content", "")
+            # Truncate very long content in summary
+            if len(content) > 200:
+                content = content[:200] + "..."
+            summary_parts.append(f"[{role}]: {content}")
+
+        summary_text = (
+            "[Summary of previous conversation]:\n" + "\n".join(summary_parts)
+        )
+        summary_msg = {"role": "user", "content": summary_text}
+
+        return system_msgs + [summary_msg] + recent
