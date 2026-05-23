@@ -158,6 +158,10 @@ async def run_repl(
                 new_tokens = Agent._estimate_tokens(agent.state.messages)
                 print(f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){RESET}\n")
                 continue
+            elif cmd == "/undo":
+                print(_git_undo())
+                print()
+                continue
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
@@ -586,6 +590,80 @@ def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
         return None
 
 
+def _git_undo(workdir: str | None = None) -> str:
+    """Undo uncommitted changes: restore modified/deleted files, remove untracked.
+
+    This is the equivalent of `git checkout . && git clean -fd` — a "panic button"
+    for reverting working tree changes. Only affects the working tree, not history.
+
+    Args:
+        workdir: Working directory (defaults to cwd).
+
+    Returns a human-readable result message.
+    """
+    cwd = workdir or os.getcwd()
+
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=cwd,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[ERROR] Not a git repo"
+
+    # Check for any changes
+    status = _run_git("status", "--porcelain")
+    if status.returncode != 0:
+        return f"[ERROR] git status failed: {status.stderr.strip()}"
+
+    if not status.stdout.strip():
+        return "[No changes to undo — working tree clean]"
+
+    changes = status.stdout.splitlines()
+    reverted = []
+    cleaned = []
+
+    for line in changes:
+        if not line.strip():
+            continue
+        # porcelain format: XY PATH — 2 status chars + space + filename
+        # XY can include spaces (e.g. " M" for unstaged modification)
+        xy = line[:2]
+        filename = line[3:]
+
+        if xy[1] == "?" or xy == "??":
+            # Untracked file — remove it
+            cleaned.append(filename)
+        else:
+            # Modified, deleted, staged, etc. — restore from HEAD
+            reverted.append(filename)
+
+    # Restore tracked files to HEAD state
+    if reverted:
+        checkout = _run_git("checkout", "HEAD", "--", *reverted)
+        if checkout.returncode != 0:
+            return f"[ERROR] git checkout failed: {checkout.stderr.strip()}"
+
+    # Remove untracked files
+    if cleaned:
+        clean = _run_git("clean", "-f", "--", *cleaned)
+        if clean.returncode != 0:
+            return f"[ERROR] git clean failed: {clean.stderr.strip()}"
+
+    parts = []
+    if reverted:
+        parts.append(f"Restored {len(reverted)} file(s) to HEAD state")
+    if cleaned:
+        parts.append(f"Removed {len(cleaned)} untracked file(s)")
+    return "[OK] " + ", ".join(parts)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -599,6 +677,7 @@ def _print_help() -> None:
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/compact{RESET}        Compact conversation history
+    {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info
 
