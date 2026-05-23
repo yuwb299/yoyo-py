@@ -88,7 +88,7 @@ class TestLoadSession:
             # Now load
             result = _load_session(filepath)
             assert result is not None
-            loaded_messages, model = result
+            loaded_messages, model, usage = result
             assert loaded_messages == messages
             assert model == "glm-5.1"
 
@@ -132,6 +132,6 @@ class TestLoadSession:
             result = _load_session(filepath)
 
             assert result is not None
-            loaded_messages, loaded_model = result
+            loaded_messages, loaded_model, loaded_usage = result
             assert loaded_messages == messages
             assert loaded_model == model

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from .agent import Agent, AgentEvent
-from .provider import GLMProvider
+from .provider import GLMProvider, Usage
 from .tools import TOOL_FUNCTIONS, TOOL_SCHEMAS
 from .skills import SkillSet
 from . import __version__
@@ -187,7 +187,7 @@ async def run_repl(
                 if not save_path:
                     # Default save location
                     save_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
-                print(_save_session(save_path, agent.state.messages, provider.model))
+                print(_save_session(save_path, agent.state.messages, provider.model, usage=agent.state.usage))
                 print()
                 continue
             elif cmd.startswith("/load"):
@@ -200,8 +200,9 @@ async def run_repl(
                     print(f"{RED}  Failed to load session from {load_path}{RESET}")
                     print(f"{DIM}  File may not exist or be invalid{RESET}\n")
                     continue
-                messages, model = result
+                messages, model, usage = result
                 agent.state.messages = messages
+                agent.state.usage = usage
                 provider.model = model
                 msg_count = len([m for m in messages if m.get("role") != "system"])
                 print(f"{GREEN}  Session loaded from {load_path}{RESET}")
@@ -514,42 +515,53 @@ def _git_commit(message: str) -> str:
     return commit.stdout.strip()
 
 
-def _save_session(filepath: str, messages: list[dict], model: str) -> str:
+def _save_session(filepath: str, messages: list[dict], model: str, usage: Usage | None = None) -> str:
     """Save conversation session to a JSON file.
 
     Args:
         filepath: Path to save the session file.
         messages: The conversation messages to save.
         model: The current model name.
+        usage: Token usage data to persist (optional, for backward compat).
 
     Returns a human-readable result message.
     """
     from datetime import datetime
+    from .provider import Usage as _Usage
 
     try:
         p = Path(filepath)
         p.parent.mkdir(parents=True, exist_ok=True)
 
-        data = {
+        data: dict[str, Any] = {
             "version": 1,
             "timestamp": datetime.now().isoformat(),
             "model": model,
             "messages": messages,
         }
+        # Persist usage data so token tracking survives session reload
+        if usage is not None:
+            data["usage"] = {
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+            }
+
         p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         return f"[OK] Session saved to {filepath} ({len(messages)} messages)"
     except Exception as e:
         return f"[ERROR] Failed to save session: {e}"
 
 
-def _load_session(filepath: str) -> tuple[list[dict], str] | None:
+def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
     """Load a conversation session from a JSON file.
 
     Args:
         filepath: Path to the session file.
 
-    Returns (messages, model) tuple, or None on failure.
+    Returns (messages, model, usage) tuple, or None on failure.
     """
+    from .provider import Usage as _Usage
+
     try:
         p = Path(filepath)
         if not p.exists():
@@ -561,8 +573,16 @@ def _load_session(filepath: str) -> tuple[list[dict], str] | None:
         if "messages" not in data or "model" not in data:
             return None
 
-        return (data["messages"], data["model"])
-    except (json.JSONDecodeError, Exception):
+        # Restore usage data (default to zero for old session files)
+        usage = _Usage()
+        if "usage" in data:
+            usage = _Usage(
+                input_tokens=data["usage"].get("input_tokens", 0),
+                output_tokens=data["usage"].get("output_tokens", 0),
+            )
+
+        return (data["messages"], data["model"], usage)
+    except Exception:
         return None
 
 
