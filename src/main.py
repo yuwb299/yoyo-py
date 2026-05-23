@@ -79,7 +79,12 @@ def main() -> None:
     pipe_input = None
     if not sys.stdin.isatty():
         pipe_input = sys.stdin.read().strip()
-        sys.stdin = open("/dev/tty")  # Reopen tty for interactive use
+        # Reopen tty for interactive use; /dev/tty may not exist on Windows/CI
+        try:
+            sys.stdin = open("/dev/tty")
+        except OSError:
+            # Fall back to original stdin (e.g. in CI or Windows environments)
+            pass
 
     asyncio.run(
         run_repl(
