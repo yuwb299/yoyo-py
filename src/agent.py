@@ -217,9 +217,10 @@ class Agent:
                 current_tool_calls[i] for i in sorted(current_tool_calls.keys())
             ]
 
-            assistant_msg: dict[str, Any] = {"role": "assistant"}
-            if assistant_content:
-                assistant_msg["content"] = assistant_content
+            assistant_msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": assistant_content or None,  # Always include content key — some APIs require it
+            }
             if tool_calls_list:
                 assistant_msg["tool_calls"] = tool_calls_list
 
@@ -310,7 +311,7 @@ class Agent:
     @staticmethod
     def _estimate_tokens(messages: list[dict[str, Any]]) -> int:
         """Rough token estimate: ~3 chars per token (conservative for mixed text)."""
-        total_chars = sum(len(m.get("content", "")) for m in messages)
+        total_chars = sum(len(m.get("content") or "") for m in messages)
         return max(total_chars // 3, 1) if total_chars else 0
 
     @staticmethod
@@ -351,7 +352,7 @@ class Agent:
         summary_parts = []
         for m in old:
             role = m.get("role", "unknown")
-            content = m.get("content", "")
+            content = m.get("content") or ""
             # Truncate very long content in summary
             if len(content) > 200:
                 content = content[:200] + "..."
