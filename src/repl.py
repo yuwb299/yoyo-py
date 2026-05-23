@@ -149,6 +149,14 @@ async def run_repl(
                         print(f"  {CYAN}{name}{RESET}: {content[:80]}...")
                 print()
                 continue
+            elif cmd == "/compact":
+                old_count = len(agent.state.messages)
+                old_tokens = Agent._estimate_tokens(agent.state.messages)
+                agent.state.messages = Agent._compact_messages(agent.state.messages)
+                new_count = len(agent.state.messages)
+                new_tokens = Agent._estimate_tokens(agent.state.messages)
+                print(f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){RESET}\n")
+                continue
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
@@ -569,6 +577,7 @@ def _print_help() -> None:
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
     {CYAN}/skills{RESET}         List loaded skills
+    {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info
 
