@@ -180,6 +180,10 @@ async def run_repl(
                 print(_git_diff_summary())
                 print()
                 continue
+            elif cmd == "/health":
+                print(_run_health_check())
+                print()
+                continue
             elif cmd.startswith("/commit"):
                 # Extract everything after "/commit " as the message
                 msg = line[7:].strip() if len(line) > 7 else ""
@@ -732,6 +736,126 @@ def _git_undo(workdir: str | None = None) -> str:
     return "[OK] " + ", ".join(parts)
 
 
+def _run_health_check(workdir: str | None = None) -> str:
+    """Run build/test/lint diagnostics for the project.
+
+    Detects project type (Python, Node, etc.) and runs appropriate checks.
+    Returns a formatted summary of results.
+    """
+    cwd = workdir or os.getcwd()
+    p = Path(cwd)
+
+    if not p.exists():
+        return f"[ERROR] Directory not found: {cwd}"
+    if not p.is_dir():
+        return f"[ERROR] Not a directory: {cwd}"
+
+    results = []
+    project_types = []
+
+    def _run(cmd: list[str], label: str) -> tuple[bool, str]:
+        """Run a command and return (success, output_summary)."""
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60, cwd=cwd
+            )
+            ok = result.returncode == 0
+            # Summarize output — first few lines
+            output = result.stdout.strip() or result.stderr.strip()
+            lines = output.splitlines()
+            if len(lines) > 10:
+                summary = "\n".join(lines[:10]) + f"\n  ... ({len(lines) - 10} more lines)"
+            else:
+                summary = output
+            return ok, summary
+        except FileNotFoundError:
+            return False, f"{cmd[0]} not found"
+        except subprocess.TimeoutExpired:
+            return False, "timed out"
+        except Exception as e:
+            return False, str(e)
+
+    # Detect Python project
+    is_python = (
+        (p / "pyproject.toml").exists()
+        or (p / "setup.py").exists()
+        or (p / "setup.cfg").exists()
+        or (p / "requirements.txt").exists()
+    )
+
+    # Detect Node project
+    is_node = (p / "package.json").exists()
+
+    if is_python:
+        project_types.append("Python")
+        # Run pytest
+        ok, output = _run(["python", "-m", "pytest", "--tb=short", "-q"], "pytest")
+        status = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+        results.append(f"  {status} pytest: {'pass' if ok else 'fail'}")
+        if not ok and output:
+            for line in output.splitlines()[:5]:
+                results.append(f"      {line}")
+
+        # Check for linting tools
+        for linter, cmd in [("ruff", ["ruff", "check", "."]), ("flake8", ["flake8", "."])]:
+            ok, output = _run(cmd, linter)
+            if "not found" not in output:
+                status = f"{GREEN}✓{RESET}" if ok else f"{YELLOW}⚠{RESET}"
+                findings = ""
+                if not ok and output:
+                    count = len(output.splitlines())
+                    findings = f" ({count} finding{'s' if count != 1 else ''})"
+                results.append(f"  {status} {linter}: {'clean' if ok else 'issues found'}{findings}")
+                break  # Only run the first available linter
+
+        # Check for type checking
+        ok, output = _run(["mypy", ".", "--no-error-summary"], "mypy")
+        if "not found" not in output:
+            status = f"{GREEN}✓{RESET}" if ok else f"{YELLOW}⚠{RESET}"
+            results.append(f"  {status} mypy: {'clean' if ok else 'type errors found'}")
+
+    if is_node:
+        project_types.append("Node.js")
+        # Run npm test
+        ok, output = _run(["npm", "test"], "npm test")
+        status = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+        results.append(f"  {status} npm test: {'pass' if ok else 'fail'}")
+
+        # Run npm lint
+        ok, output = _run(["npm", "run", "lint"], "npm lint")
+        if "not found" not in output and "missing script" not in output.lower():
+            status = f"{GREEN}✓{RESET}" if ok else f"{YELLOW}⚠{RESET}"
+            results.append(f"  {status} npm lint: {'clean' if ok else 'issues found'}")
+
+    if not project_types:
+        results.append(f"  {DIM}No recognized project type found{RESET}")
+
+    # Git status summary
+    git_check = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        capture_output=True, text=True, timeout=5, cwd=cwd,
+    )
+    git_info = ""
+    if git_check.returncode == 0:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5, cwd=cwd,
+        )
+        if status.returncode == 0:
+            changes = len([l for l in status.stdout.strip().splitlines() if l.strip()])
+            if changes == 0:
+                git_info = f"  {GREEN}✓{RESET} git: clean working tree"
+            else:
+                git_info = f"  {YELLOW}⚠{RESET} git: {changes} uncommitted change(s)"
+
+    header = f"{BOLD}Health Check{RESET} — {', '.join(project_types) or 'Unknown'} project"
+    parts = [header] + results
+    if git_info:
+        parts.append(git_info)
+
+    return "\n".join(parts)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -740,6 +864,7 @@ def _print_help() -> None:
     {CYAN}/help{RESET}           Show this help
     {CYAN}/model <name>{RESET}   Switch model (clears history)
     {CYAN}/diff{RESET}           Show git diff summary
+    {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
