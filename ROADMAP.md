@@ -29,7 +29,7 @@
 - [ ] `/fix` — auto-fix build/lint errors
 - [ ] `/test` — detect project type and run tests
 - [ ] `/init` — scan project and generate YOYO.md context file
-- [ ] `/tree` — project structure visualization
+- [x] `/tree` — project structure visualization (Day 4)
 - [ ] Permission system (confirm before bash/write/edit)
 - [ ] `--yes` flag to auto-approve all
 - [ ] Project memory (`/remember`, `/memories`, `/forget`)
