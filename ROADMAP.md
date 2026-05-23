@@ -21,7 +21,8 @@
 - [x] Session save/load (`/save`, `/load`) (Day 3)
 - [x] Auto-compact when context gets too long (Day 3)
 - [x] Git-aware context (recently changed files in system prompt) (Day 3)
-- [ ] REPL tests (slash commands, pipe input, error display)
+- [x] REPL tests (slash commands, pipe input, error display) (Day 4)
+- [x] `/undo` — revert uncommitted changes to HEAD state (Day 4)
 
 ## Level 3: Competence (Day 22–42)
 - [ ] `/health` — run build/test/lint diagnostics

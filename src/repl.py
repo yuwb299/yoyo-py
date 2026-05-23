@@ -162,6 +162,10 @@ async def run_repl(
                 print(_git_undo())
                 print()
                 continue
+            elif cmd == "/tree":
+                print(_project_tree())
+                print()
+                continue
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
@@ -590,6 +594,70 @@ def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
         return None
 
 
+def _project_tree(path: str = ".", max_depth: int = 4) -> str:
+    """Display project directory tree structure.
+
+    Ignores common noise directories (.git, node_modules, __pycache__, .venv, etc.)
+    and shows a visual tree with indentation.
+
+    Args:
+        path: Root directory to start from.
+        max_depth: Maximum depth to traverse.
+
+    Returns a tree-formatted string.
+    """
+    root = Path(path)
+    if not root.exists():
+        return f"[ERROR] Path not found: {path}"
+    if not root.is_dir():
+        return f"[ERROR] Not a directory: {path}"
+
+    # Directories to skip (common noise)
+    IGNORE_DIRS = {
+        ".git", "node_modules", "__pycache__", ".venv", "venv",
+        ".tox", ".mypy_cache", ".pytest_cache", ".hg", ".svn",
+        "dist", "build", ".eggs", ".idea", ".vscode",
+    }
+
+    file_count = 0
+    dir_count = 0
+
+    def _walk(directory: Path, prefix: str, depth: int) -> list[str]:
+        nonlocal file_count, dir_count
+        lines = []
+
+        try:
+            entries = sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower()))
+        except PermissionError:
+            lines.append(f"{prefix}[permission denied]")
+            return lines
+
+        # Filter out ignored directories
+        entries = [e for e in entries if e.name not in IGNORE_DIRS]
+
+        for i, entry in enumerate(entries):
+            is_last = i == len(entries) - 1
+            connector = "└── " if is_last else "├── "
+            child_prefix = "    " if is_last else "│   "
+
+            if entry.is_dir():
+                dir_count += 1
+                lines.append(f"{prefix}{connector}{entry.name}/")
+                if depth < max_depth:
+                    lines.extend(_walk(entry, prefix + child_prefix, depth + 1))
+            else:
+                file_count += 1
+                lines.append(f"{prefix}{connector}{entry.name}")
+
+        return lines
+
+    tree_lines = [f"{root.name}/"]
+    tree_lines.extend(_walk(root, "", 1))
+    tree_lines.append(f"\n{file_count} file(s), {dir_count} director(ies)")
+
+    return "\n".join(tree_lines)
+
+
 def _git_undo(workdir: str | None = None) -> str:
     """Undo uncommitted changes: restore modified/deleted files, remove untracked.
 
@@ -678,6 +746,7 @@ def _print_help() -> None:
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
+    {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info
 
