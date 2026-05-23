@@ -18,9 +18,9 @@
 - [x] `/diff` — show git diff summary (Day 2)
 - [x] `/commit` — stage all and commit with message (Day 2, bug fixed Day 3)
 - [x] Multi-line input support (backslash continuation) (Day 2)
-- [ ] Session save/load (`/save`, `/load`)
-- [ ] Auto-compact when context gets too long
-- [ ] Git-aware context (recently changed files in system prompt)
+- [x] Session save/load (`/save`, `/load`) (Day 3)
+- [x] Auto-compact when context gets too long (Day 3)
+- [x] Git-aware context (recently changed files in system prompt) (Day 3)
 - [ ] REPL tests (slash commands, pipe input, error display)
 
 ## Level 3: Competence (Day 22–42)

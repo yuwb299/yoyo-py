@@ -2,7 +2,7 @@
 """yoyo-py — a self-evolving coding agent built with Python + GLM 5.
 
 Usage:
-    ANTHROPIC_API_KEY=*** python -m src.main
+    GLM_API_KEY=*** python -m src.main
     GLM_API_KEY=*** python -m src.main --skills ./skills
     python -m src.main -p "explain this codebase"
     echo "write a README" | python -m src.main

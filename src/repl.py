@@ -44,6 +44,7 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
         "Use tools proactively: read files to understand context, run commands to verify your work.",
         "After making changes, run tests or verify the result when appropriate.",
         "You respond in the same language the user uses.",
+        f"Current working directory: {os.getcwd()}",
     ]
 
     # Add git context (branch, recently changed files)
