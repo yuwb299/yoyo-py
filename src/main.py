@@ -22,6 +22,7 @@ load_dotenv()
 
 from .provider import GLMProvider
 from .repl import run_repl
+from . import __version__
 
 
 def parse_args() -> argparse.Namespace:
@@ -52,6 +53,11 @@ def parse_args() -> argparse.Namespace:
         "-v", "--verbose",
         action="store_true",
         help="Verbose output",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
     )
     return parser.parse_args()
 

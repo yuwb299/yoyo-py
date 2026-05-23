@@ -13,6 +13,7 @@ from .agent import Agent, AgentEvent
 from .provider import GLMProvider
 from .tools import TOOL_FUNCTIONS, TOOL_SCHEMAS
 from .skills import SkillSet
+from . import __version__
 
 # ANSI colors
 RESET = "\x1b[0m"
@@ -26,7 +27,7 @@ MAGENTA = "\x1b[35m"
 
 
 def print_banner() -> None:
-    print(f"\n{BOLD}{CYAN}  yoyo-py{RESET} {DIM}— a self-evolving coding agent (Python + GLM 5){RESET}")
+    print(f"\n{BOLD}{CYAN}  yoyo-py{RESET} {DIM}v{__version__} — a self-evolving coding agent (Python + GLM 5){RESET}")
     print(f"{DIM}  Type /help for commands, /quit to exit{RESET}\n")
 
 
