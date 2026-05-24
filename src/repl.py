@@ -76,12 +76,54 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
     return "\n".join(parts)
 
 
+def _make_confirm_fn(
+    auto_approve: bool = False,
+    input_fn: Callable | None = None,
+) -> Callable[[str, dict], bool]:
+    """Create a confirmation function for destructive tool calls.
+
+    Args:
+        auto_approve: If True, always return True (used with --yes flag).
+        input_fn: Function to call for user input. Defaults to built-in input().
+
+    Returns:
+        A function (tool_name, tool_args) -> bool that decides whether to allow
+        a destructive tool call.
+    """
+    if auto_approve:
+        return lambda name, args: True
+
+    _input = input_fn or input
+
+    def _confirm(tool_name: str, tool_args: dict) -> bool:
+        # Build a short summary of what the tool will do
+        if tool_name == "bash":
+            summary = f"$ {tool_args.get('command', '...')}"
+        elif tool_name == "write_file":
+            summary = f"write → {tool_args.get('path', '?')}"
+        elif tool_name == "edit_file":
+            summary = f"edit → {tool_args.get('path', '?')}"
+        else:
+            summary = f"{tool_name}({tool_args})"
+
+        try:
+            answer = _input(f"{YELLOW}  ⚠ Allow {summary}? [y/N]{RESET} ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            # Default to reject on Ctrl+C/D
+            return False
+
+        return answer in ("y", "yes")
+
+    return _confirm
+
+
 async def run_repl(
     provider: GLMProvider,
     skill_dirs: list[str] | None = None,
     verbose: bool = False,
     initial_prompt: str | None = None,
     pipe_input: str | None = None,
+    auto_approve: bool = False,
 ) -> None:
     """Run the interactive REPL loop."""
     # Load skills
@@ -92,12 +134,17 @@ async def run_repl(
 
     system_prompt = load_system_prompt(skills)
 
+    # Wire up permission system: confirm before destructive tools
+    # unless --yes flag is set (which auto-approves everything)
+    confirm_fn = _make_confirm_fn(auto_approve=auto_approve)
+
     agent = Agent(
         provider=provider,
         system_prompt=system_prompt,
         tools=TOOL_FUNCTIONS,
         tool_schemas=TOOL_SCHEMAS,
         verbose=verbose,
+        confirm_fn=confirm_fn,
     )
 
     print_banner()

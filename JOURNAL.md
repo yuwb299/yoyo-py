@@ -1,5 +1,9 @@
 # Journal
 
+## Day 6 — Session ended immediately
+
+User typed "exit" right away. No changes made.
+
 ## Day 5 (Cycle 3) — Compact Bug Fix, ROADMAP Update, Permission System (partial)
 
 Evolution cycle timed out at 360s while integrating the permission system into the REPL. The Agent-level permission system is complete and tested; REPL integration (--yes flag + confirmation prompt) remains pending.

@@ -55,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         help="Verbose output",
     )
     parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Auto-approve all destructive tool calls (bash, write_file, edit_file)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -93,6 +98,7 @@ def main() -> None:
             verbose=args.verbose,
             initial_prompt=args.prompt,
             pipe_input=pipe_input,
+            auto_approve=args.yes,
         )
     )
 
