@@ -240,6 +240,10 @@ async def run_repl(
                 print(_run_test_command())
                 print()
                 continue
+            elif cmd == "/fix":
+                print(_run_fix_command())
+                print()
+                continue
             elif cmd.startswith("/init"):
                 force = "--force" in cmd
                 print(_run_init_command(force=force))
@@ -1212,6 +1216,120 @@ def _run_init_command(workdir: str | None = None, force: bool = False) -> str:
     return f"{GREEN}[OK] YOYO.md created — project context ready{RESET}"
 
 
+def _run_fix_command(workdir: str | None = None) -> str:
+    """Auto-fix build/lint errors by running formatters and fixers.
+
+    Detects project type and runs appropriate fix tools:
+    - Python: ruff fix, then black (if ruff unavailable)
+    - Node.js: eslint --fix
+
+    Returns a formatted summary of what was fixed.
+    """
+    cwd = workdir or os.getcwd()
+    p = Path(cwd)
+
+    if not p.exists():
+        return f"[ERROR] Directory not found: {cwd}"
+    if not p.is_dir():
+        return f"[ERROR] Not a directory: {cwd}"
+
+    # Detect project type
+    is_python = (
+        (p / "pyproject.toml").exists()
+        or (p / "setup.py").exists()
+        or (p / "setup.cfg").exists()
+        or (p / "requirements.txt").exists()
+    )
+    is_node = (p / "package.json").exists()
+
+    def _run(cmd: list[str]) -> tuple[bool, str]:
+        """Run a command and return (success, output)."""
+        try:
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=60, cwd=cwd,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+            return result.returncode == 0, output
+        except FileNotFoundError:
+            return False, f"{cmd[0]} not found"
+        except subprocess.TimeoutExpired:
+            return False, "timed out"
+        except Exception as e:
+            return False, str(e)
+
+    results = []
+
+    if is_python:
+        # Try ruff first (fix + format in one tool)
+        ok, output = _run(["ruff", "check", "--fix", "."])
+        if "not found" in output.lower():
+            # Fallback: try black for formatting
+            ok2, output2 = _run(["black", "."])
+            if "not found" in output2.lower():
+                results.append(f"  {YELLOW}⚠{RESET} No fixer available — install ruff (`pip install ruff`) or black (`pip install black`)")
+            else:
+                if ok2:
+                    if "reformatted" in output2:
+                        results.append(f"  {GREEN}✓{RESET} black: {output2.splitlines()[0] if output2 else 'files reformatted'}")
+                    else:
+                        results.append(f"  {GREEN}✓{RESET} black: already formatted")
+                else:
+                    results.append(f"  {RED}✗{RESET} black: {output2[:200]}")
+        else:
+            if ok:
+                if "fixed" in output.lower():
+                    results.append(f"  {GREEN}✓{RESET} ruff fix: {output.splitlines()[0] if output else 'issues fixed'}")
+                else:
+                    results.append(f"  {GREEN}✓{RESET} ruff: no issues found")
+            else:
+                # ruff found unfixable issues — still report what it could fix
+                lines = output.splitlines()
+                summary = lines[-3:] if len(lines) > 3 else lines
+                results.append(f"  {YELLOW}⚠{RESET} ruff: some issues cannot be auto-fixed")
+                for line in summary[:5]:
+                    results.append(f"      {line}")
+
+        # Also run ruff format (safe auto-formatting)
+        ok_fmt, output_fmt = _run(["ruff", "format", "."])
+        if "not found" not in output_fmt.lower():
+            if ok_fmt:
+                if "reformatted" in output_fmt.lower():
+                    results.append(f"  {GREEN}✓{RESET} ruff format: files reformatted")
+                else:
+                    results.append(f"  {GREEN}✓{RESET} ruff format: already formatted")
+
+    elif is_node:
+        # Try eslint --fix
+        ok, output = _run(["npx", "eslint", "--fix", "."])
+        if "not found" in output.lower() or "command" in output.lower():
+            # Try project-local eslint
+            ok, output = _run(["./node_modules/.bin/eslint", "--fix", "."])
+            if "not found" in output.lower():
+                results.append(f"  {YELLOW}⚠{RESET} No eslint found — install with `npm install eslint --save-dev`")
+            else:
+                if ok:
+                    results.append(f"  {GREEN}✓{RESET} eslint: no issues remaining")
+                else:
+                    results.append(f"  {YELLOW}⚠{RESET} eslint: some issues cannot be auto-fixed")
+                    for line in output.splitlines()[:5]:
+                        results.append(f"      {line}")
+        else:
+            if ok:
+                results.append(f"  {GREEN}✓{RESET} eslint: no issues remaining")
+            else:
+                lines = output.splitlines()
+                summary = lines[:5]
+                results.append(f"  {YELLOW}⚠{RESET} eslint: some issues cannot be auto-fixed")
+                for line in summary:
+                    results.append(f"      {line}")
+
+    else:
+        return f"{DIM}No recognized project type found — can't determine fix command{RESET}"
+
+    header = f"{BOLD}Auto-fix{RESET} — {'Python' if is_python else 'Node.js'} project"
+    return header + "\n" + "\n".join(results)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -1222,6 +1340,7 @@ def _print_help() -> None:
     {CYAN}/diff{RESET}           Show git diff summary
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/test{RESET}          Run project tests
+    {CYAN}/fix{RESET}           Auto-fix lint/format errors
     {CYAN}/init{RESET}          Generate YOYO.md context file (--force to overwrite)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
