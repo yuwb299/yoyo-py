@@ -68,6 +68,11 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
     if skills and not skills.is_empty():
         parts.append(f"\n# Loaded Skills\n{skills.to_prompt()}")
 
+    # Add project memories
+    memories_prompt = _load_memories_into_prompt()
+    if memories_prompt:
+        parts.append(memories_prompt)
+
     return "\n".join(parts)
 
 
@@ -219,6 +224,33 @@ async def run_repl(
                 msg_count = len([m for m in messages if m.get("role") != "system"])
                 print(f"{GREEN}  Session loaded from {load_path}{RESET}")
                 print(f"{DIM}  {msg_count} messages, model: {model}{RESET}\n")
+                continue
+            elif cmd.startswith("/remember"):
+                # Remember a project fact
+                text = line[9:].strip() if len(line) > 9 else ""
+                if not text:
+                    print(f"{YELLOW}Usage: /remember <text>{RESET}\n")
+                    continue
+                print(_add_memory(text))
+                print()
+                continue
+            elif cmd == "/memories":
+                print(_list_memories())
+                print()
+                continue
+            elif cmd.startswith("/forget"):
+                # Forget a memory by ID
+                mem_id_str = line[7:].strip() if len(line) > 7 else ""
+                if not mem_id_str:
+                    print(f"{YELLOW}Usage: /forget <id>{RESET}\n")
+                    continue
+                try:
+                    mem_id = int(mem_id_str)
+                except ValueError:
+                    print(f"{RED}  ID must be a number{RESET}\n")
+                    continue
+                print(_forget_memory(mem_id))
+                print()
                 continue
             else:
                 print(f"{DIM}  Unknown command: {line}{RESET}\n")
@@ -736,6 +768,102 @@ def _git_undo(workdir: str | None = None) -> str:
     return "[OK] " + ", ".join(parts)
 
 
+# ── Project memory system ─────────────────────────────────────────────
+
+def _get_memory_dir() -> Path:
+    """Get the .yoyo directory in the current working directory."""
+    return Path(os.getcwd()) / ".yoyo"
+
+
+def _get_memory_file(memory_dir: Path | None = None) -> Path:
+    """Get the path to the memories JSON file."""
+    return (memory_dir or _get_memory_dir()) / "memories.json"
+
+
+def _read_memories(memory_dir: Path | None = None) -> list[dict]:
+    """Read memories from the JSON file. Returns empty list if no file."""
+    mem_file = _get_memory_file(memory_dir)
+    if not mem_file.exists():
+        return []
+    try:
+        return json.loads(mem_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, Exception):
+        return []
+
+
+def _write_memories(memories: list[dict], memory_dir: Path | None = None) -> None:
+    """Write memories to the JSON file. Removes file if empty."""
+    mem_dir = memory_dir or _get_memory_dir()
+    mem_file = mem_dir / "memories.json"
+    if not memories:
+        # Clean up empty file
+        if mem_file.exists():
+            mem_file.unlink()
+        return
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    mem_file.write_text(json.dumps(memories, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _add_memory(text: str, memory_dir: Path | None = None) -> str:
+    """Add a project memory. Returns a confirmation message."""
+    if not text.strip():
+        return "[ERROR] Memory text cannot be empty"
+
+    from datetime import datetime
+    memories = _read_memories(memory_dir)
+
+    # Auto-increment ID
+    next_id = max((m.get("id", 0) for m in memories), default=0) + 1
+
+    memories.append({
+        "id": next_id,
+        "text": text.strip(),
+        "timestamp": datetime.now().isoformat(),
+    })
+    _write_memories(memories, memory_dir)
+    return f"[OK] Remembered #{next_id}: {text.strip()}"
+
+
+def _list_memories(memory_dir: Path | None = None) -> str:
+    """List all project memories. Returns a formatted string."""
+    memories = _read_memories(memory_dir)
+    if not memories:
+        return "No memories saved. Use /remember <text> to add one."
+
+    lines = [f"{BOLD}Project Memories:{RESET}"]
+    for m in memories:
+        lines.append(f"  {CYAN}#{m['id']}{RESET} {m['text']}")
+    return "\n".join(lines)
+
+
+def _forget_memory(mem_id: int, memory_dir: Path | None = None) -> str:
+    """Remove a memory by ID. Returns a confirmation message."""
+    memories = _read_memories(memory_dir)
+    if not memories:
+        return "[ERROR] No memories to forget"
+
+    original_len = len(memories)
+    memories = [m for m in memories if m.get("id") != mem_id]
+
+    if len(memories) == original_len:
+        return f"[ERROR] Memory #{mem_id} not found"
+
+    _write_memories(memories, memory_dir)
+    return f"[OK] Forgot memory #{mem_id}"
+
+
+def _load_memories_into_prompt(memory_dir: Path | None = None) -> str:
+    """Load memories formatted for injection into the system prompt."""
+    memories = _read_memories(memory_dir)
+    if not memories:
+        return ""
+
+    lines = ["# Project Memories"]
+    for m in memories:
+        lines.append(f"- {m['text']}")
+    return "\n".join(lines)
+
+
 def _run_health_check(workdir: str | None = None) -> str:
     """Run build/test/lint diagnostics for the project.
 
@@ -874,6 +1002,9 @@ def _print_help() -> None:
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/status{RESET}         Show session info
+    {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
+    {CYAN}/memories{RESET}       List all remembered facts
+    {CYAN}/forget <id>{RESET}    Forget a remembered fact by ID
 
 {BOLD}  Tools:{RESET}
     bash, read_file, write_file, edit_file, search, list_files
