@@ -27,12 +27,12 @@
 ## Level 3: Competence (Day 22–42)
 - [x] `/health` — run build/test/lint diagnostics (Day 5)
 - [ ] `/fix` — auto-fix build/lint errors
-- [ ] `/test` — detect project type and run tests
-- [ ] `/init` — scan project and generate YOYO.md context file
+- [x] `/test` — detect project type and run tests (Day 5)
+- [x] `/init` — scan project and generate YOYO.md context file (Day 5)
 - [x] `/tree` — project structure visualization (Day 4)
 - [ ] Permission system (confirm before bash/write/edit)
 - [ ] `--yes` flag to auto-approve all
-- [ ] Project memory (`/remember`, `/memories`, `/forget`)
+- [x] Project memory (`/remember`, `/memories`, `/forget`) (Day 5)
 
 ## Level 4: Mastery (Day 43–70)
 - [ ] Multiple provider support (Anthropic, OpenAI, DeepSeek, etc.)
