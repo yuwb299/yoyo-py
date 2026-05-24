@@ -189,6 +189,10 @@ async def run_repl(
                 print(_run_health_check())
                 print()
                 continue
+            elif cmd == "/test":
+                print(_run_test_command())
+                print()
+                continue
             elif cmd.startswith("/commit"):
                 # Extract everything after "/commit " as the message
                 msg = line[7:].strip() if len(line) > 7 else ""
@@ -984,6 +988,79 @@ def _run_health_check(workdir: str | None = None) -> str:
     return "\n".join(parts)
 
 
+def _run_test_command(workdir: str | None = None) -> str:
+    """Detect project type and run tests.
+
+    Simpler and more focused than /health — just runs the test suite
+    and shows results. Returns a formatted summary.
+    """
+    cwd = workdir or os.getcwd()
+    p = Path(cwd)
+
+    if not p.exists():
+        return f"[ERROR] Directory not found: {cwd}"
+    if not p.is_dir():
+        return f"[ERROR] Not a directory: {cwd}"
+
+    # Detect Python project
+    is_python = (
+        (p / "pyproject.toml").exists()
+        or (p / "setup.py").exists()
+        or (p / "setup.cfg").exists()
+        or (p / "requirements.txt").exists()
+    )
+
+    # Detect Node project
+    is_node = (p / "package.json").exists()
+
+    if is_python:
+        try:
+            result = subprocess.run(
+                ["python", "-m", "pytest", "--tb=short", "-q"],
+                capture_output=True, text=True, timeout=120, cwd=cwd,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+
+            if result.returncode == 0:
+                # Show last few lines of summary
+                lines = output.splitlines()
+                summary = lines[-3:] if len(lines) > 3 else lines
+                return f"{GREEN}✓ Tests passed{RESET}\n" + "\n".join(summary)
+            else:
+                lines = output.splitlines()
+                # Show summary line + a few failure details
+                summary = lines[-5:] if len(lines) > 5 else lines
+                return f"{RED}✗ Tests failed{RESET}\n" + "\n".join(summary)
+
+        except FileNotFoundError:
+            return f"{YELLOW}pytest not installed — run: pip install pytest{RESET}"
+        except subprocess.TimeoutExpired:
+            return f"{RED}✗ Tests timed out (120s){RESET}"
+
+    elif is_node:
+        try:
+            result = subprocess.run(
+                ["npm", "test"],
+                capture_output=True, text=True, timeout=120, cwd=cwd,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+            lines = output.splitlines()
+            summary = lines[-5:] if len(lines) > 5 else lines
+
+            if result.returncode == 0:
+                return f"{GREEN}✓ Tests passed{RESET}\n" + "\n".join(summary)
+            else:
+                return f"{RED}✗ Tests failed{RESET}\n" + "\n".join(summary)
+
+        except FileNotFoundError:
+            return f"{YELLOW}npm not found — install Node.js{RESET}"
+        except subprocess.TimeoutExpired:
+            return f"{RED}✗ Tests timed out (120s){RESET}"
+
+    else:
+        return f"{DIM}No recognized project type found — can't determine test command{RESET}"
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -993,6 +1070,7 @@ def _print_help() -> None:
     {CYAN}/model <name>{RESET}   Switch model (clears history)
     {CYAN}/diff{RESET}           Show git diff summary
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
+    {CYAN}/test{RESET}          Run project tests
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
