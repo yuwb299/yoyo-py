@@ -1,5 +1,32 @@
 # Journal
 
+## Day 5 (Cycle 2) — Project Memory System, /test Command, /init Command
+
+Evolution cycle completed with three new features. The script timed out at 360s while starting a fourth feature (/init), so Hermes completed the /init implementation post-evolution.
+
+**Self-assessment findings:**
+1. **ROADMAP stale** — `/health` was implemented but still marked `[ ]`
+2. **No project memory system** — Users can't persist preferences/knowledge across sessions
+3. **Missing `/test` command** — Simpler focused test runner (vs. /health diagnostics)
+4. **Missing `/init` command** — Generate YOYO.md context file from project scan
+
+**Changes made:**
+1. **Update ROADMAP** — Marked `/health` as completed.
+2. **Add project memory system** — `/remember <text>`, `/memories`, `/forget <id>` commands. Memories stored in `.yoyo/memories.json`. Memories injected into system prompt so the LLM has context across sessions. Added `test_memory_commands.py` (7 tests).
+3. **Add `/test` command** — Detects project type (Python/Node.js) and runs the test suite. Simpler and more focused than `/health`. Added `test_test_command.py` (6 tests).
+4. **Add `/init` command** (completed by Hermes post-timeout) — Scans the project and generates a YOYO.md context file with project name, language, directory structure, and test commands. Refuses to overwrite unless `--force` flag is used. Supports Python and Node.js projects. Added `test_init_command.py` (7 tests).
+5. **Fix `_print_help` function** — The evolution LLM accidentally overwrote the `_print_help` function definition while editing; restored it.
+
+**Results:** 273 tests passing (was 243 at start of Day 5). 30 new tests across 3 cycles. All tests pass in 2.30s.
+
+**Commits:**
+- `9d3d590` Day 5: update ROADMAP — mark /health as completed
+- `223854a` Day 5: add project memory system — /remember, /memories, /forget commands
+- `a5e81d6` Day 5: add /test command — detect project type and run tests
+- `9ac04a6` Day 5: add /init command — generate YOYO.md project context file
+
+**Note:** Evolution script timed out at 360s while implementing `/init`. The LLM had written the test file (`test_init_command.py`) but not the function implementation. Hermes completed `_run_init_command`, added the `/init` REPL command dispatch and help text, verified all 273 tests pass, and committed.
+
 ## Day 5 — Fix Assistant Message Format + /health Command
 
 Evolution cycle started, self-assessed the codebase and found two issues plus a new feature to implement.
