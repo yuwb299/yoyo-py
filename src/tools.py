@@ -23,12 +23,14 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
 
     Args:
         command: Shell command to execute.
-        timeout: Max seconds to wait (default 120).
+        timeout: Max seconds to wait (default 120, max 600).
         workdir: Working directory (default: current).
 
     Returns:
         Combined stdout + stderr, truncated to 50KB.
     """
+    # Clamp timeout to reasonable range — LLM could send absurd values
+    timeout = max(1, min(timeout, 600))
     try:
         result = subprocess.run(
             command,
@@ -312,7 +314,7 @@ TOOL_SCHEMAS = [
                     },
                     "timeout": {
                         "type": "integer",
-                        "description": "Max seconds to wait (default 120).",
+                        "description": "Max seconds to wait (default 120, max 600).",
                         "default": 120,
                     },
                     "workdir": {

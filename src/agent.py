@@ -129,6 +129,8 @@ class Agent:
                 hint = ""
                 if e.category == "rate_limit":
                     hint = " (rate limited — wait a moment and try again)"
+                elif e.category == "retry_exhausted":
+                    hint = " (all retries failed — the API may be down or rate limiting persistently)"
                 elif e.category == "auth":
                     hint = " (check your API key in .env)"
                 elif e.category == "connection":
