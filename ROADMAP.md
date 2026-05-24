@@ -25,7 +25,7 @@
 - [x] `/undo` — revert uncommitted changes to HEAD state (Day 4)
 
 ## Level 3: Competence (Day 22–42)
-- [ ] `/health` — run build/test/lint diagnostics
+- [x] `/health` — run build/test/lint diagnostics (Day 5)
 - [ ] `/fix` — auto-fix build/lint errors
 - [ ] `/test` — detect project type and run tests
 - [ ] `/init` — scan project and generate YOYO.md context file
