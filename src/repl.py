@@ -193,6 +193,11 @@ async def run_repl(
                 print(_run_test_command())
                 print()
                 continue
+            elif cmd.startswith("/init"):
+                force = "--force" in cmd
+                print(_run_init_command(force=force))
+                print()
+                continue
             elif cmd.startswith("/commit"):
                 # Extract everything after "/commit " as the message
                 msg = line[7:].strip() if len(line) > 7 else ""
@@ -1061,6 +1066,105 @@ def _run_test_command(workdir: str | None = None) -> str:
         return f"{DIM}No recognized project type found — can't determine test command{RESET}"
 
 
+def _run_init_command(workdir: str | None = None, force: bool = False) -> str:
+    """Scan the project and generate a YOYO.md context file.
+
+    Creates a YOYO.md file with project info: name, language, structure,
+    test commands, and key files. Refuses to overwrite unless force=True.
+    """
+    cwd = workdir or os.getcwd()
+    p = Path(cwd)
+
+    if not p.exists() or not p.is_dir():
+        return f"[ERROR] Directory not found: {cwd}"
+
+    yoyo_path = p / "YOYO.md"
+
+    # Don't overwrite existing YOYO.md unless forced
+    if yoyo_path.exists() and not force:
+        return f"{YELLOW}YOYO.md already exists — use /init --force to overwrite{RESET}"
+
+    # Detect project type
+    is_python = (
+        (p / "pyproject.toml").exists()
+        or (p / "setup.py").exists()
+        or (p / "setup.cfg").exists()
+        or (p / "requirements.txt").exists()
+    )
+    is_node = (p / "package.json").exists()
+
+    # Build project info
+    project_name = p.name
+    language = "unknown"
+    test_cmd = "unknown"
+    project_details = ""
+
+    if is_python:
+        language = "Python"
+        test_cmd = "python -m pytest"
+        # Try to read project name from pyproject.toml
+        pyproject = p / "pyproject.toml"
+        if pyproject.exists():
+            content = pyproject.read_text()
+            for line in content.splitlines():
+                if line.strip().startswith("name"):
+                    project_name = line.split("=", 1)[1].strip().strip("'\"")
+                    break
+        project_details = f"- Language: {language}\n- Test: `{test_cmd}`\n"
+
+    elif is_node:
+        language = "Node.js"
+        try:
+            pkg = json.loads((p / "package.json").read_text())
+            project_name = pkg.get("name", project_name)
+            test_cmd = pkg.get("scripts", {}).get("test", "npm test")
+        except (json.JSONDecodeError, OSError):
+            test_cmd = "npm test"
+        project_details = f"- Language: {language}\n- Test: `npm test` (or `{test_cmd}`)\n"
+
+    # Build directory tree (limited depth)
+    def _build_tree(directory: Path, prefix: str = "", depth: int = 0, max_depth: int = 3) -> list[str]:
+        if depth > max_depth:
+            return [f"{prefix}..."]
+        entries = sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name))
+        # Skip hidden and common ignored dirs
+        skip = {".git", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".mypy_cache", ".tox", "dist", "build", ".eggs", ".next"}
+        lines = []
+        for entry in entries:
+            if entry.name.startswith(".") and entry.name not in {".env", ".github"}:
+                continue
+            if entry.name in skip:
+                continue
+            if entry.is_dir():
+                lines.append(f"{prefix}{entry.name}/")
+                lines.extend(_build_tree(entry, prefix + "  ", depth + 1, max_depth))
+            else:
+                lines.append(f"{prefix}{entry.name}")
+        return lines
+
+    tree_lines = _build_tree(p)
+    tree_str = "\n".join(tree_lines[:50])  # Cap at 50 lines
+    if len(tree_lines) > 50:
+        tree_str += "\n  ... (truncated)"
+
+    # Compose YOYO.md
+    yoyo_content = f"""# {project_name}
+
+## Project Overview
+{project_details}
+## Directory Structure
+```
+{tree_str}
+```
+
+## Notes
+<!-- Add project-specific context and conventions here -->
+"""
+
+    yoyo_path.write_text(yoyo_content)
+    return f"{GREEN}[OK] YOYO.md created — project context ready{RESET}"
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -1071,6 +1175,7 @@ def _print_help() -> None:
     {CYAN}/diff{RESET}           Show git diff summary
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/test{RESET}          Run project tests
+    {CYAN}/init{RESET}          Generate YOYO.md context file (--force to overwrite)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
