@@ -49,6 +49,9 @@ class Agent:
     5. Emit streaming text and tool events to caller
     """
 
+    # Tools that modify state and should require user confirmation
+    DESTRUCTIVE_TOOLS = {"bash", "write_file", "edit_file"}
+
     def __init__(
         self,
         provider: GLMProvider,
@@ -57,6 +60,7 @@ class Agent:
         tool_schemas: list[dict] | None = None,
         max_tool_rounds: int = 20,
         verbose: bool = False,
+        confirm_fn: Callable[[str, dict], bool] | None = None,
     ):
         self.provider = provider
         self.system_prompt = system_prompt
@@ -65,6 +69,7 @@ class Agent:
         self.state = AgentState(max_tool_rounds=max_tool_rounds)
         self.verbose = verbose
         self._interrupted = False  # Set to True by Ctrl+C to stop current turn
+        self.confirm_fn = confirm_fn  # Optional: ask user before destructive tools
 
         if self.system_prompt:
             self.state.messages = [
@@ -247,6 +252,24 @@ class Agent:
                     tool_args = {}
 
                 yield (AgentEvent.TOOL_START, {"name": tool_name, "args": tool_args})
+
+                # Permission check: confirm_fn can deny destructive tools
+                if (self.confirm_fn is not None
+                        and tool_name in self.DESTRUCTIVE_TOOLS
+                        and not self.confirm_fn(tool_name, tool_args)):
+                    denied_msg = f"Permission denied: {tool_name} was not approved by user"
+                    yield (
+                        AgentEvent.TOOL_END,
+                        {"name": tool_name, "output": denied_msg, "is_error": True},
+                    )
+                    self.state.messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": denied_msg,
+                        }
+                    )
+                    continue
 
                 if tool_name in self.tools:
                     try:
