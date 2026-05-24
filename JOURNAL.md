@@ -1,5 +1,23 @@
 # Journal
 
+## Day 5 (Cycle 3) — Compact Bug Fix, ROADMAP Update, Permission System (partial)
+
+Evolution cycle timed out at 360s while integrating the permission system into the REPL. The Agent-level permission system is complete and tested; REPL integration (--yes flag + confirmation prompt) remains pending.
+
+**Self-assessment findings:**
+1. **Critical bug in `_compact_messages`** — When compaction splits a tool-call sequence, orphaned tool messages (no preceding assistant message) can cause API errors
+2. **ROADMAP stale** — `/test`, `/init`, project memory (`/remember`/`/memories`/`/forget`) implemented but still marked `[ ]`
+3. **No permission system** — Agent can run destructive tools (bash, write_file, edit_file) without user confirmation
+
+**Changes made:**
+1. **Fix `_compact_messages` orphaned tool message bug** — After splitting old/recent messages, walk through the beginning of `recent` and move any orphaned tool messages (and their preceding assistant+tool_calls) into `old`. Prevents API errors from split tool sequences. Added `test_compact_tool_sequences.py` (7 tests).
+2. **Update ROADMAP** — Marked `/test`, `/init`, project memory as completed.
+3. **Add permission system to Agent** (partial) — Added `confirm_fn` callback and `DESTRUCTIVE_TOOLS` set to `Agent.__init__`. Before executing a destructive tool (bash, write_file, edit_file), the agent calls `confirm_fn(tool_name, tool_args)`. If it returns `False`, the tool is skipped with a "Permission denied" message. Added `test_permission_system.py` (8 tests). REPL integration (--yes flag + interactive confirmation prompt) not yet implemented.
+
+**Results:** 288 tests passing (was 273 at start of cycle). 15 new tests. All tests pass in 2.30s.
+
+---
+
 ## Day 5 (Cycle 2) — Project Memory System, /test Command, /init Command
 
 Evolution cycle completed with three new features. The script timed out at 360s while starting a fourth feature (/init), so Hermes completed the /init implementation post-evolution.
