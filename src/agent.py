@@ -330,6 +330,9 @@ class Agent:
         - Always keep the system prompt (first message if role=="system")
         - Keep the last *keep_recent* non-system messages
         - Replace older messages with a single summary
+        - Never leave orphaned tool messages — if compaction would split a
+          tool-call sequence, the orphaned tool messages (and their preceding
+          assistant with tool_calls) are moved into the "old" bucket
         """
         if not messages:
             return messages
@@ -347,6 +350,49 @@ class Agent:
         # Split into old (to summarize) and recent (to keep)
         old = rest[:-keep_recent]
         recent = rest[-keep_recent:]
+
+        # Fix orphaned tool messages: tool messages must be preceded by an
+        # assistant message with tool_calls. Walk forward through recent and
+        # move any leading orphaned sequence into old.
+        # An orphaned sequence looks like: [assistant(w/ tool_calls), tool, ...tool]
+        # at the start of recent, or just [tool, ...tool] at the start.
+        while recent:
+            if recent[0].get("role") == "tool":
+                # Orphaned tool message — find the assistant that triggered it
+                # (must be the last message in old) and move both to old
+                if old and old[-1].get("role") == "assistant" and "tool_calls" in old[-1]:
+                    # Move the assistant from old→recent boundary is wrong;
+                    # the assistant is in old, the tool is in recent.
+                    # Easiest fix: move the tool into old so the pair stays together
+                    # in the summary. Then check the next message in recent.
+                    old.append(recent.pop(0))
+                else:
+                    # Tool message with no preceding assistant — just drop it
+                    # (shouldn't normally happen, but defensive)
+                    recent.pop(0)
+            elif (recent[0].get("role") == "assistant"
+                  and "tool_calls" in recent[0]
+                  and len(recent) > 1
+                  and recent[1].get("role") == "tool"):
+                # The assistant+tool sequence starts at the beginning of recent.
+                # This is actually fine — the sequence is intact. But we need to
+                # make sure ALL tool responses for this assistant are in recent.
+                # Find how many tool messages follow (they share the same tool_call_ids).
+                call_ids = {tc["id"] for tc in recent[0].get("tool_calls", [])}
+                i = 1
+                while i < len(recent) and recent[i].get("role") == "tool":
+                    i += 1
+                # If all tool responses for this assistant are present, it's intact
+                tool_ids_in_recent = {recent[j].get("tool_call_id") for j in range(1, i) if recent[j].get("role") == "tool"}
+                if call_ids.issubset(tool_ids_in_recent):
+                    break  # Sequence is intact, stop fixing
+                else:
+                    # Some tool responses are missing — move the whole sequence to old
+                    for _ in range(i):
+                        old.append(recent.pop(0))
+            else:
+                # First message in recent is not a tool or orphaned assistant — we're good
+                break
 
         # Build a simple summary of old messages
         summary_parts = []
