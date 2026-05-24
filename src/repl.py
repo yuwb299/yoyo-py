@@ -136,7 +136,9 @@ async def run_repl(
 
     # Wire up permission system: confirm before destructive tools
     # unless --yes flag is set (which auto-approves everything)
-    confirm_fn = _make_confirm_fn(auto_approve=auto_approve)
+    # Non-interactive mode (pipe/prompt) also auto-approves — no user to confirm
+    non_interactive = bool(pipe_input or initial_prompt)
+    confirm_fn = _make_confirm_fn(auto_approve=auto_approve or non_interactive)
 
     agent = Agent(
         provider=provider,
