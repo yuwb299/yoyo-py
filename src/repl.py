@@ -224,6 +224,10 @@ async def run_repl(
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
+            elif cmd == "/history":
+                print(_format_history(agent.state.messages))
+                print()
+                continue
             elif cmd == "/status":
                 print(f"{DIM}  model: {provider.model}{RESET}")
                 print(f"{DIM}  cwd:   {os.getcwd()}{RESET}")
@@ -1492,6 +1496,67 @@ def _run_review(workdir: str | None = None, commit: bool = False) -> str:
 
 # ── /log command ────────────────────────────────────────────────────────
 
+def _format_history(messages: list[dict]) -> str:
+    """Format conversation history as a readable summary.
+
+    Shows each message's role, a content preview (truncated), and tool call
+    names if present. Useful for understanding what the agent has been doing.
+
+    Args:
+        messages: The conversation messages list.
+
+    Returns a formatted string.
+    """
+    if not messages:
+        return "No messages in conversation."
+
+    lines = [f"{BOLD}Conversation History{RESET} ({len(messages)} messages)"]
+
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "unknown")
+        content = msg.get("content")
+        tool_calls = msg.get("tool_calls")
+
+        # Role icon
+        role_icons = {
+            "system": "⚙",
+            "user": "👤",
+            "assistant": "🤖",
+            "tool": "🔧",
+        }
+        icon = role_icons.get(role, "•")
+
+        if role == "system":
+            # System messages are long — just show a label
+            preview = "system prompt"
+        elif role == "tool":
+            tool_call_id = msg.get("tool_call_id", "?")
+            preview = (content or "")[:80]
+            if len((content or "")) > 80:
+                preview += "..."
+            lines.append(f"  {icon} {DIM}tool [{tool_call_id}]{RESET} {preview}")
+            continue
+        elif tool_calls:
+            # Assistant with tool calls — show which tools
+            tool_names = [tc["function"]["name"] for tc in tool_calls if "function" in tc]
+            tools_str = ", ".join(tool_names)
+            text_preview = ""
+            if content:
+                text_preview = f": {(content)[:60]}"
+            lines.append(f"  {icon} {CYAN}assistant{RESET} → {YELLOW}{tools_str}{RESET}{text_preview}")
+            continue
+        else:
+            # Regular user or assistant message
+            preview = (content or "")[:100]
+            if len((content or "")) > 100:
+                preview += "..."
+
+        role_color = CYAN if role == "user" else (GREEN if role == "assistant" else DIM)
+        lines.append(f"  {icon} {role_color}{role}{RESET} {preview}")
+
+    return "\n".join(lines)
+
+
 def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
     """Show recent git commit log.
 
@@ -1652,6 +1717,7 @@ def _print_help() -> None:
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
+    {CYAN}/history{RESET}       Show conversation history summary
     {CYAN}/status{RESET}         Show session info
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
