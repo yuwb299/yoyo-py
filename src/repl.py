@@ -235,6 +235,20 @@ async def run_repl(
                 print(_git_diff_summary())
                 print()
                 continue
+            elif cmd.startswith("/log"):
+                # /log or /log N (show N recent commits)
+                count_str = line[4:].strip() if len(line) > 4 else ""
+                count = 10
+                if count_str:
+                    try:
+                        count = int(count_str)
+                        count = max(1, min(count, 100))  # Clamp to reasonable range
+                    except ValueError:
+                        print(f"{YELLOW}Usage: /log [N] — N is number of commits{RESET}\n")
+                        continue
+                print(_run_git_log(count=count))
+                print()
+                continue
             elif cmd == "/health":
                 print(_run_health_check())
                 print()
@@ -1476,6 +1490,59 @@ def _run_review(workdir: str | None = None, commit: bool = False) -> str:
     return prompt
 
 
+# ── /log command ────────────────────────────────────────────────────────
+
+def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
+    """Show recent git commit log.
+
+    Args:
+        workdir: Working directory (defaults to cwd).
+        count: Number of commits to show (default 10).
+
+    Returns a formatted commit log or error message.
+    """
+    cwd = workdir or os.getcwd()
+
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=cwd,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[Not a git repo]"
+
+    # Format: short hash | subject | author name | relative date
+    # Using | as separator for reliable parsing
+    log_format = "%h|%s|%an|%cr"
+    log_result = _run_git("log", f"-{count}", f"--format={log_format}")
+
+    if log_result.returncode != 0:
+        return f"[ERROR] git log failed: {log_result.stderr[:200]}"
+
+    output = log_result.stdout.strip()
+    if not output:
+        return "[No commits yet]"
+
+    # Parse and format nicely
+    lines = []
+    for entry in output.splitlines():
+        parts = entry.split("|", 3)
+        if len(parts) == 4:
+            short_hash, subject, author, date = parts
+            lines.append(f"  {YELLOW}{short_hash}{RESET} {subject} {DIM}({author}, {date}){RESET}")
+        else:
+            lines.append(f"  {entry}")
+
+    header = f"{BOLD}Recent Commits{RESET} (last {count})"
+    return header + "\n" + "\n".join(lines)
+
+
 # ── Custom slash commands from .yoyo/commands/ ─────────────────────────
 
 def _load_custom_commands(workdir: str | None = None) -> dict[str, dict[str, str]]:
@@ -1570,6 +1637,7 @@ def _print_help() -> None:
     {CYAN}/help{RESET}           Show this help
     {CYAN}/model <name>{RESET}   Switch model (clears history)
     {CYAN}/diff{RESET}           Show git diff summary
+    {CYAN}/log [N]{RESET}        Show recent git commits (default 10)
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/test{RESET}          Run project tests
     {CYAN}/fix{RESET}           Auto-fix lint/format errors
