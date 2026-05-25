@@ -1,4 +1,9 @@
-"""GLM 5 API provider — OpenAI-compatible interface for Zhipu AI."""
+"""API provider — OpenAI-compatible interface supporting multiple LLM providers.
+
+Supports GLM 5, OpenAI, DeepSeek, and any OpenAI-compatible API.
+Provider presets simplify configuration: just set the right API key env var
+and pass --provider <name> to select the backend.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,61 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from openai import OpenAI
+
+
+# ── Provider presets ────────────────────────────────────────────────────
+# Each preset defines: base_url, env_key (for API key), default_model
+# Any OpenAI-compatible API can be used by setting --base-url and the
+# appropriate API key environment variable directly.
+
+PROVIDER_PRESETS: dict[str, dict[str, str]] = {
+    "glm": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "env_key": "GLM_API_KEY",
+        "default_model": "glm-5.1",
+    },
+    "openai": {
+        "base_url": "https://api.openai.com/v1",
+        "env_key": "OPENAI_API_KEY",
+        "default_model": "gpt-4o",
+    },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "env_key": "DEEPSEEK_API_KEY",
+        "default_model": "deepseek-chat",
+    },
+    "moonshot": {
+        "base_url": "https://api.moonshot.cn/v1",
+        "env_key": "MOONSHOT_API_KEY",
+        "default_model": "moonshot-v1-8k",
+    },
+    "zhipu": {
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "env_key": "GLM_API_KEY",
+        "default_model": "glm-4-plus",
+    },
+}
+
+
+def resolve_provider_config(provider_name: str) -> dict[str, str]:
+    """Resolve a provider preset name to its configuration.
+
+    Args:
+        provider_name: Provider name (case-insensitive). E.g. "glm", "openai", "deepseek".
+
+    Returns:
+        Dict with base_url, env_key, default_model.
+
+    Raises:
+        ValueError: If provider_name is not a known preset.
+    """
+    key = provider_name.lower()
+    if key not in PROVIDER_PRESETS:
+        available = ", ".join(sorted(PROVIDER_PRESETS.keys()))
+        raise ValueError(
+            f"Unknown provider '{provider_name}'. Available providers: {available}"
+        )
+    return PROVIDER_PRESETS[key]
 
 
 @dataclass
@@ -104,12 +164,20 @@ class GLMProvider:
         api_key: str | None = None,
         base_url: str | None = None,
         model: str | None = None,
+        provider: str | None = None,
     ):
-        self.api_key = api_key or os.getenv("GLM_API_KEY", "")
-        self.base_url = base_url or os.getenv(
-            "GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"
-        )
-        self.model = model or os.getenv("GLM_MODEL", "glm-5.1")
+        # Resolve provider preset if given
+        if provider:
+            preset = resolve_provider_config(provider)
+            self.base_url = base_url or os.getenv("GLM_BASE_URL", preset["base_url"])
+            self.model = model or os.getenv("GLM_MODEL", preset["default_model"])
+            self.api_key = api_key or os.getenv(preset["env_key"], "")
+        else:
+            self.api_key = api_key or os.getenv("GLM_API_KEY", "")
+            self.base_url = base_url or os.getenv(
+                "GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"
+            )
+            self.model = model or os.getenv("GLM_MODEL", "glm-5.1")
 
         if not self.api_key:
             raise ValueError(

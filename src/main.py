@@ -50,6 +50,12 @@ def parse_args() -> argparse.Namespace:
         help="API base URL (default: from GLM_BASE_URL env)",
     )
     parser.add_argument(
+        "--provider",
+        default=None,
+        choices=None,
+        help="Provider preset: glm, openai, deepseek, moonshot, zhipu",
+    )
+    parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Verbose output",
@@ -74,10 +80,11 @@ def main() -> None:
         provider = GLMProvider(
             model=args.model,
             base_url=args.base_url,
+            provider=args.provider,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
-        print("Set GLM_API_KEY in .env or environment.", file=sys.stderr)
+        print("Set the appropriate API key in .env or environment.", file=sys.stderr)
         sys.exit(1)
 
     # Check for piped stdin
