@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import subprocess
+import re
 import sys
 from pathlib import Path
 
@@ -300,6 +301,20 @@ async def run_repl(
                 print(_list_memories())
                 print()
                 continue
+            elif cmd == "/commands":
+                custom_cmds = _load_custom_commands()
+                if not custom_cmds:
+                    print(f"{DIM}  No custom commands found — create .yoyo/commands/*.md{RESET}")
+                else:
+                    print(f"{BOLD}  Custom Commands:{RESET}")
+                    for name, info in custom_cmds.items():
+                        desc = info.get("description", "")
+                        if desc:
+                            print(f"    {CYAN}/{name}{RESET} — {desc}")
+                        else:
+                            print(f"    {CYAN}/{name}{RESET}")
+                print()
+                continue
             elif cmd.startswith("/forget"):
                 # Forget a memory by ID
                 mem_id_str = line[7:].strip() if len(line) > 7 else ""
@@ -315,7 +330,14 @@ async def run_repl(
                 print()
                 continue
             else:
-                print(f"{DIM}  Unknown command: {line}{RESET}\n")
+                # Check custom commands from .yoyo/commands/
+                custom_name = line[1:].split()[0]  # Remove / and take first word
+                custom_args = line[1 + len(custom_name):].strip()  # Rest is args
+                resolved = _resolve_custom_command(custom_name, args=custom_args)
+                if resolved is not None:
+                    await _run_agent_turn(agent, resolved)
+                else:
+                    print(f"{DIM}  Unknown command: {line}{RESET}\n")
                 continue
 
         # Run agent turn
@@ -1332,6 +1354,92 @@ def _run_fix_command(workdir: str | None = None) -> str:
     return header + "\n" + "\n".join(results)
 
 
+# ── Custom slash commands from .yoyo/commands/ ─────────────────────────
+
+def _load_custom_commands(workdir: str | None = None) -> dict[str, dict[str, str]]:
+    """Load custom command definitions from .yoyo/commands/*.md files.
+
+    Each .md file defines a command. The filename (minus .md) is the command name.
+    Files can have YAML frontmatter with 'name' and 'description' fields.
+    The remaining content is the prompt template, optionally with {{args}} placeholder.
+
+    Returns:
+        Dict mapping command_name -> {"prompt": str, "description": str}
+    """
+    cwd = workdir or os.getcwd()
+    cmd_dir = Path(cwd) / ".yoyo" / "commands"
+
+    if not cmd_dir.is_dir():
+        return {}
+
+    commands: dict[str, dict[str, str]] = {}
+    for md_file in sorted(cmd_dir.glob("*.md")):
+        try:
+            text = md_file.read_text(encoding="utf-8")
+        except Exception:
+            continue
+
+        name = md_file.stem
+        description = ""
+        content = text.strip()
+
+        # Parse YAML frontmatter
+        fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
+        if fm_match:
+            frontmatter = fm_match.group(1)
+            content = fm_match.group(2).strip()
+
+            for line in frontmatter.splitlines():
+                if line.startswith("name:"):
+                    name = line.split(":", 1)[1].strip()
+                elif line.startswith("description:"):
+                    description = line.split(":", 1)[1].strip()
+
+        commands[name] = {
+            "prompt": content,
+            "description": description,
+        }
+
+    return commands
+
+
+def _resolve_custom_command(
+    command_name: str,
+    workdir: str | None = None,
+    args: str = "",
+) -> str | None:
+    """Resolve a custom command to its prompt text.
+
+    If the command has a {{args}} placeholder, substitute it.
+    If no placeholder but args are provided, append them to the prompt.
+
+    Args:
+        command_name: The slash command name (without /).
+        workdir: Working directory to search for .yoyo/commands/.
+        args: Additional arguments from the user input.
+
+    Returns:
+        The resolved prompt text, or None if command not found.
+    """
+    commands = _load_custom_commands(workdir)
+
+    if command_name not in commands:
+        return None
+
+    prompt = commands[command_name]["prompt"]
+
+    if "{{args}}" in prompt:
+        prompt = prompt.replace("{{args}}", args)
+    elif args:
+        # When no placeholder, just append args — this is more useful
+        # than silently dropping them, as the user explicitly typed something
+        prompt = f"{prompt}\n\n{args}"
+
+    return prompt
+
+
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -1356,6 +1464,7 @@ def _print_help() -> None:
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
     {CYAN}/forget <id>{RESET}    Forget a remembered fact by ID
+    {CYAN}/commands{RESET}       List custom slash commands from .yoyo/commands/
 
 {BOLD}  Tools:{RESET}
     bash, read_file, write_file, edit_file, search, list_files
