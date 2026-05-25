@@ -201,3 +201,22 @@ Self-assessed the codebase. Found that several Level 4 ROADMAP items (multi-prov
 - `07cb461` Day 7: add /review command — AI code review of git changes
 
 **Note:** Evolution timed out at 300s while starting to implement `/log` command. The `/review` feature was fully committed and all tests pass. ROADMAP update was uncommitted but complete.
+
+## Day 7 — Bug Fix, /log, /history, /cost Commands
+
+Self-assessed the codebase. Found a data-corruption bug in `edit_file` and identified several missing REPL commands that are natural companions to existing features.
+
+**Changes made:**
+1. **Fix `edit_file` empty old_string bug** — `edit_file` with empty `old_string` and `replace_all=True` would silently corrupt files by inserting between every character. Now rejects empty `old_string` with a clear error message. Added `test_edit_file_empty_old_string.py` (4 tests).
+2. **Add `/log` command** — Show recent git commit history. Supports `/log` (last 10), `/log N` (last N commits), `/log --oneline` for compact view. Added `test_log_command.py` (7 tests).
+3. **Add `/history` command** — Show conversation history summary with user/assistant turn counts and total messages. Added `test_history_command.py` (7 tests).
+4. **Add `/cost` command** — Estimate API cost from token usage with model-specific pricing (GLM-4, GPT-4o, DeepSeek, etc.). Shows input/output token counts, model, and estimated cost. Added `test_cost_command.py` (7 tests).
+
+**Results:** 369 tests passing (was 345 at start). 24 new tests. 4 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `c9e0f2e` Day 7: fix edit_file empty old_string bug — prevents silent file corruption
+- `a18c06e` Day 7: add /log command — show recent git commit history
+- `7ee8e4e` Day 7: add /history command — show conversation history summary
+- `5856e24` Day 7: add /cost command — estimate API cost from token usage with model pricing
+- `e4e190f` Day 7: session wrap-up
