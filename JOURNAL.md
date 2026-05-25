@@ -186,3 +186,18 @@ Self-assessed the codebase after the first Day 4 cycle. Found 5 improvements: se
 - `75d4b49` Day 4: session wrap-up
 
 **Note:** Evolution hit max tool rounds (50) while updating ROADMAP.md after the /tree commit. All code changes were committed. Final ROADMAP edit was not committed but is in the session wrap-up commit. All 233 tests pass.
+
+## Day 7 — /review Command, ROADMAP Cleanup
+
+Self-assessed the codebase. Found that several Level 4 ROADMAP items (multi-provider, custom slash commands, provider failover) were already implemented but still marked incomplete. Also identified `/review` as a high-value missing feature.
+
+**Changes made:**
+1. **Add `/review` command** — AI code review of git changes. Supports `/review` (review unstaged changes), `/review --staged` (review staged changes), and `/review --commit` (review last commit). Shows diff stats and generates a review prompt the agent can act on. Added `test_review_command.py` (12 tests).
+2. **Update ROADMAP.md** — Marked already-completed Level 4 items: "Multiple provider support" (PROVIDER_PRESETS with glm/openai/deepseek/moonshot/zhipu), "Custom slash commands from .yoyo/commands/" (already working), "Provider failover on API error" (FailoverProvider exists).
+
+**Results:** 345 tests passing (was 333 at start). 12 new tests.
+
+**Commits:**
+- `07cb461` Day 7: add /review command — AI code review of git changes
+
+**Note:** Evolution timed out at 300s while starting to implement `/log` command. The `/review` feature was fully committed and all tests pass. ROADMAP update was uncommitted but complete.

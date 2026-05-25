@@ -35,14 +35,14 @@
 - [x] Project memory (`/remember`, `/memories`, `/forget`) (Day 5)
 
 ## Level 4: Mastery (Day 43–70)
-- [ ] Multiple provider support (Anthropic, OpenAI, DeepSeek, etc.)
+- [x] Multiple provider support (Anthropic, OpenAI, DeepSeek, etc.) (Day 5)
 - [ ] Extended thinking / reasoning depth control
-- [ ] `/review` — AI code review of changes
+- [x] `/review` — AI code review of changes (Day 7)
 - [ ] `/pr` — full PR workflow
-- [ ] Custom slash commands from `.yoyo/commands/`
+- [x] Custom slash commands from `.yoyo/commands/` (Day 5)
 - [ ] MCP server integration
 - [ ] Subagent spawning for parallel tasks
-- [ ] Provider failover on API failure
+- [x] Provider failover on API failure (Day 5)
 
 ## Level 5: Evolution (Day 71+)
 - [ ] Self-assessment skill: analyze own code quality
