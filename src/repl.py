@@ -228,6 +228,10 @@ async def run_repl(
                 print(_format_history(agent.state.messages))
                 print()
                 continue
+            elif cmd == "/cost":
+                print(_estimate_cost(agent.state.usage, model=provider.model))
+                print()
+                continue
             elif cmd == "/status":
                 print(f"{DIM}  model: {provider.model}{RESET}")
                 print(f"{DIM}  cwd:   {os.getcwd()}{RESET}")
@@ -1608,6 +1612,82 @@ def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
     return header + "\n" + "\n".join(lines)
 
 
+# ── /cost command ──────────────────────────────────────────────────────
+
+# Pricing per million tokens (approximate, as of 2025-2026).
+# These are estimates and may not reflect current pricing.
+_MODEL_PRICING: dict[str, dict[str, float]] = {
+    # GLM models (Zhipu AI) — pricing in USD per million tokens
+    "glm-5": {"input": 0.50, "output": 2.00},
+    "glm-5.1": {"input": 0.50, "output": 2.00},
+    "glm-4-plus": {"input": 0.70, "output": 3.00},
+    "glm-4": {"input": 0.40, "output": 1.50},
+    "glm-4-flash": {"input": 0.05, "output": 0.20},
+    # OpenAI models
+    "gpt-4o": {"input": 2.50, "output": 10.00},
+    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
+    "gpt-4-turbo": {"input": 10.00, "output": 30.00},
+    "o1": {"input": 15.00, "output": 60.00},
+    "o1-mini": {"input": 3.00, "output": 12.00},
+    # DeepSeek models
+    "deepseek-chat": {"input": 0.14, "output": 0.28},
+    "deepseek-reasoner": {"input": 0.55, "output": 2.19},
+    # Moonshot models
+    "moonshot-v1-8k": {"input": 0.50, "output": 0.50},
+    "moonshot-v1-32k": {"input": 1.00, "output": 1.00},
+    "moonshot-v1-128k": {"input": 3.00, "output": 3.00},
+}
+
+
+def _find_model_pricing(model: str) -> dict[str, float] | None:
+    """Find pricing for a model, handling version suffixes.
+
+    E.g. 'glm-5.1-plus' should match 'glm-5.1' if no exact match.
+    """
+    # Exact match first
+    if model in _MODEL_PRICING:
+        return _MODEL_PRICING[model]
+
+    # Try prefix matching: 'gpt-4o-2024-05-13' → 'gpt-4o'
+    for prefix in sorted(_MODEL_PRICING.keys(), key=len, reverse=True):
+        if model.startswith(prefix):
+            return _MODEL_PRICING[prefix]
+
+    return None
+
+
+def _estimate_cost(usage: Usage, model: str) -> str:
+    """Estimate API cost from token usage data.
+
+    Args:
+        usage: Token usage data.
+        model: The model name.
+
+    Returns a formatted string with cost breakdown.
+    """
+    pricing = _find_model_pricing(model)
+
+    if pricing is None:
+        return (
+            f"{BOLD}Cost Estimate{RESET}\n"
+            f"  Model: {model} (unknown pricing)\n"
+            f"  Input:  {usage.input_tokens:,} tokens\n"
+            f"  Output: {usage.output_tokens:,} tokens\n"
+            f"  {DIM}Set pricing in _MODEL_PRICING to get cost estimates.{RESET}"
+        )
+
+    input_cost = (usage.input_tokens / 1_000_000) * pricing["input"]
+    output_cost = (usage.output_tokens / 1_000_000) * pricing["output"]
+    total_cost = input_cost + output_cost
+
+    return (
+        f"{BOLD}Cost Estimate{RESET} — {model}\n"
+        f"  Input:  {usage.input_tokens:>10,} tokens  (${input_cost:.4f})\n"
+        f"  Output: {usage.output_tokens:>10,} tokens  (${output_cost:.4f})\n"
+        f"  {BOLD}Total:  ${(total_cost):.4f}{RESET}"
+    )
+
+
 # ── Custom slash commands from .yoyo/commands/ ─────────────────────────
 
 def _load_custom_commands(workdir: str | None = None) -> dict[str, dict[str, str]]:
@@ -1718,6 +1798,7 @@ def _print_help() -> None:
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/history{RESET}       Show conversation history summary
+    {CYAN}/cost{RESET}          Estimate API cost from token usage
     {CYAN}/status{RESET}         Show session info
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
