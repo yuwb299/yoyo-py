@@ -247,6 +247,30 @@ async def run_repl(
                 print(_run_fix_command())
                 print()
                 continue
+            elif cmd == "/review":
+                # Review working tree changes
+                review_result = _run_review()
+                if review_result.startswith("["):
+                    # Error/status message — just display it
+                    print(review_result)
+                else:
+                    # Actual review prompt — send to agent
+                    await _run_agent_turn(agent, review_result)
+                print()
+                continue
+            elif cmd.startswith("/review"):
+                # /review with options: --commit
+                args_str = line[7:].strip()
+                if "--commit" in args_str:
+                    review_result = _run_review(commit=True)
+                    if review_result.startswith("["):
+                        print(review_result)
+                    else:
+                        await _run_agent_turn(agent, review_result)
+                else:
+                    print(f"{YELLOW}Usage: /review [--commit]{RESET}")
+                print()
+                continue
             elif cmd.startswith("/init"):
                 force = "--force" in cmd
                 print(_run_init_command(force=force))
@@ -1354,6 +1378,104 @@ def _run_fix_command(workdir: str | None = None) -> str:
     return header + "\n" + "\n".join(results)
 
 
+# ── /review command ─────────────────────────────────────────────────────
+
+# Max diff size (chars) before truncation — prevents blowing up the prompt
+_REVIEW_DIFF_LIMIT = 30000
+
+# Review focus areas — included in every review prompt so the LLM checks systematically
+_REVIEW_FOCUS = """\
+- **Bugs**: Logic errors, off-by-one, null/None handling, edge cases
+- **Security**: Injection, path traversal, secrets in code, unsafe deserialization
+- **Performance**: Unnecessary loops, N+1 queries, memory leaks, redundant work
+- **Style**: Naming, dead code, complexity, consistency with surrounding code
+- **Testing**: Are changes testable? Missing test coverage for new paths?"""
+
+
+def _review_prompt_from_diff(diff: str) -> str | None:
+    """Build a review prompt from a unified diff string.
+
+    Returns the prompt text, or None if the diff is empty.
+    """
+    if not diff.strip():
+        return None
+
+    # Truncate very large diffs to keep the prompt manageable
+    if len(diff) > _REVIEW_DIFF_LIMIT:
+        diff = diff[:_REVIEW_DIFF_LIMIT] + "\n... [diff truncated]"
+
+    return f"""Please review the following code changes and provide constructive feedback.
+
+Focus on these areas:
+{_REVIEW_FOCUS}
+
+If the changes look good, say so briefly. Don't fabricate issues.
+
+```
+{diff}
+```"""
+
+
+def _run_review(workdir: str | None = None, commit: bool = False) -> str:
+    """Generate a code review prompt from git changes.
+
+    By default, reviews unstaged + staged changes. With commit=True, reviews
+    the diff of the last commit (HEAD~1..HEAD).
+
+    Returns the review prompt (to be sent to the LLM), or an error/status message.
+    """
+    cwd = workdir or os.getcwd()
+
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=cwd,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[Not a git repo]"
+
+    if commit:
+        # Review the last commit
+        diff_result = _run_git("diff", "HEAD~1", "HEAD")
+        if diff_result.returncode != 0:
+            # Might be the first commit with no parent
+            # Try diff against empty tree
+            diff_result = _run_git("diff", "--cached", "HEAD")
+            if diff_result.returncode != 0:
+                return f"[ERROR] Could not get commit diff: {diff_result.stderr[:200]}"
+        prompt = _review_prompt_from_diff(diff_result.stdout)
+        if prompt is None:
+            return "[No changes in the last commit to review]"
+        return prompt
+
+    # Review working tree changes (unstaged + staged)
+    diff_result = _run_git("diff")
+    diff_cached_result = _run_git("diff", "--cached")
+
+    if diff_result.returncode != 0 or diff_cached_result.returncode != 0:
+        return f"[ERROR] git diff failed: {diff_result.stderr[:200]}"
+
+    combined = ""
+    if diff_result.stdout.strip():
+        combined += diff_result.stdout.strip()
+    if diff_cached_result.stdout.strip():
+        if combined:
+            combined += "\n\n"
+        combined += diff_cached_result.stdout.strip()
+
+    prompt = _review_prompt_from_diff(combined)
+    if prompt is None:
+        return "[No changes to review — working tree clean]"
+
+    return prompt
+
+
 # ── Custom slash commands from .yoyo/commands/ ─────────────────────────
 
 def _load_custom_commands(workdir: str | None = None) -> dict[str, dict[str, str]]:
@@ -1451,6 +1573,8 @@ def _print_help() -> None:
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/test{RESET}          Run project tests
     {CYAN}/fix{RESET}           Auto-fix lint/format errors
+    {CYAN}/review{RESET}        AI code review of current changes
+    {CYAN}/review --commit{RESET} Review the last commit
     {CYAN}/init{RESET}          Generate YOYO.md context file (--force to overwrite)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
