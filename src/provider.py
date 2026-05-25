@@ -180,8 +180,9 @@ class GLMProvider:
             self.model = model or os.getenv("GLM_MODEL", "glm-5.1")
 
         if not self.api_key:
+            env_var = preset["env_key"] if provider else "GLM_API_KEY"
             raise ValueError(
-                "GLM_API_KEY is required. Set it in .env or pass to constructor."
+                f"{env_var} is required. Set it in .env or pass to constructor."
             )
 
         self.client = OpenAI(
@@ -236,3 +237,71 @@ class GLMProvider:
                 output_tokens=getattr(response.usage, "completion_tokens", 0) or 0,
             )
         return Usage()
+
+
+class FailoverProvider:
+    """Provider that tries multiple API backends in order, falling back on failure.
+
+    When the primary provider fails with a retryable error (rate limit, timeout,
+    connection error), the next provider in the list is tried. Non-retryable
+    errors (auth, bad request) are raised immediately without failover.
+
+    Usage:
+        primary = GLMProvider(provider="glm")
+        secondary = GLMProvider(provider="openai")
+        provider = FailoverProvider([primary, secondary])
+        stream = provider.chat(messages, tools=tools)
+    """
+
+    def __init__(self, providers: list[GLMProvider]):
+        if not providers:
+            raise ValueError("At least one provider is required")
+        self.providers = providers
+        # Expose the first provider's model as the "active" model
+        self.model = providers[0].model
+
+    def chat(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        stream: bool = True,
+    ) -> Any:
+        """Try each provider in order until one succeeds.
+
+        Raises APIError if all providers fail or if a non-retryable error occurs.
+        """
+        last_error: APIError | None = None
+
+        for i, provider in enumerate(self.providers):
+            try:
+                result = provider.chat(messages=messages, tools=tools, stream=stream)
+                # Update the active model reference
+                self.model = provider.model
+                return result
+            except APIError as e:
+                # Non-retryable errors (auth, bad_request) don't get failover
+                if not e.retryable:
+                    raise
+
+                last_error = e
+                # Log the failover attempt (provider name from model)
+                if i < len(self.providers) - 1:
+                    import sys
+                    next_provider = self.providers[i + 1]
+                    print(
+                        f"\n  ⚠ Provider {provider.model} failed ({e.category}), "
+                        f"falling back to {next_provider.model}...",
+                        file=sys.stderr,
+                    )
+
+        # All providers exhausted
+        raise APIError(
+            f"All providers failed (tried {len(self.providers)}). Last error: {last_error}",
+            category="retry_exhausted",
+            retryable=False,
+        )
+
+    @staticmethod
+    def parse_usage(response: Any) -> Usage:
+        """Extract token usage — delegates to GLMProvider.parse_usage."""
+        return GLMProvider.parse_usage(response)
