@@ -139,6 +139,11 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
         if not p.exists():
             return f"[ERROR] File not found: {path}"
 
+        # Reject empty old_string — it matches between every character in
+        # str.replace(), which silently corrupts files
+        if not old_string:
+            return "[ERROR] old_string cannot be empty — use write_file to replace entire file contents"
+
         content = p.read_text(encoding="utf-8")
         count = content.count(old_string)
 
