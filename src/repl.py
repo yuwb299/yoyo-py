@@ -220,7 +220,11 @@ async def run_repl(
                 continue
             elif cmd.startswith("/cd"):
                 target = line[3:].strip() if len(line) > 3 else ""
-                print(_handle_cd_command(target))
+                result = _handle_cd_command(target)
+                print(result)
+                if result.startswith("[OK]"):
+                    # Update system prompt's cwd reference so agent knows new directory
+                    _update_system_prompt_cwd(agent.state.messages)
                 print()
                 continue
             elif cmd == "/tree":
@@ -798,6 +802,49 @@ def _handle_cd_command(path: str) -> str:
         return f"[OK] Changed directory to {target}"
     except OSError as e:
         return f"[ERROR] Cannot change directory: {e}"
+
+
+def _update_system_prompt_cwd(messages: list[dict]) -> None:
+    """Update the cwd line in the system prompt after /cd.
+
+    Finds the first system message and updates the 'Current working directory' line
+    so the agent's context stays fresh. Also refreshes git context.
+    """
+    if not messages or messages[0].get("role") != "system":
+        return
+
+    content = messages[0].get("content", "")
+    if not content:
+        return
+
+    lines = content.split("\n")
+    updated = False
+    for i, line in enumerate(lines):
+        if line.startswith("Current working directory:"):
+            lines[i] = f"Current working directory: {os.getcwd()}"
+            updated = True
+            break
+
+    if updated:
+        # Also refresh git context section if present
+        new_lines = []
+        skip_git = False
+        for line in lines:
+            if line.startswith("# Git Context"):
+                skip_git = True
+                continue
+            if skip_git and (line.startswith("#") or not line.startswith(" ")):
+                skip_git = False
+                # Insert fresh git context
+                git_ctx = _git_context()
+                if git_ctx:
+                    new_lines.append(git_ctx)
+                new_lines.append(line)
+                continue
+            if not skip_git:
+                new_lines.append(line)
+
+        messages[0]["content"] = "\n".join(new_lines)
 
 
 def _project_tree(path: str = ".", max_depth: int = 4) -> str:
