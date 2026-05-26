@@ -255,6 +255,9 @@ async def run_repl(
                     base_url=provider.base_url,
                     provider=getattr(provider, '_provider_name', None),
                     api_key=provider.api_key,
+                    max_tokens=provider.max_tokens,
+                    temperature=provider.temperature,
+                    top_p=provider.top_p,
                 ))
                 print()
                 continue
@@ -1815,6 +1818,9 @@ def _show_env_info(
     base_url: str,
     provider: str | None,
     api_key: str = "",
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+    top_p: float | None = None,
 ) -> str:
     """Show current provider configuration for debugging.
 
@@ -1826,19 +1832,32 @@ def _show_env_info(
         base_url: API base URL.
         provider: Provider preset name (None for custom).
         api_key: API key (will be masked in output).
+        max_tokens: Max output tokens (None = API default).
+        temperature: Sampling temperature (None = API default).
+        top_p: Nucleus sampling threshold (None = API default).
 
     Returns a formatted string with config details.
     """
     provider_label = provider if provider else "custom"
     masked_key = _mask_api_key(api_key)
 
-    return (
-        f"{BOLD}Provider Config{RESET}\n"
-        f"  Provider: {provider_label}\n"
-        f"  Model:    {model}\n"
-        f"  Base URL: {base_url}\n"
-        f"  API Key:  {masked_key}"
-    )
+    lines = [
+        f"{BOLD}Provider Config{RESET}",
+        f"  Provider: {provider_label}",
+        f"  Model:    {model}",
+        f"  Base URL: {base_url}",
+        f"  API Key:  {masked_key}",
+    ]
+
+    # Show generation params if explicitly set
+    if max_tokens is not None:
+        lines.append(f"  Max Tokens: {max_tokens}")
+    if temperature is not None:
+        lines.append(f"  Temperature: {temperature}")
+    if top_p is not None:
+        lines.append(f"  Top P: {top_p}")
+
+    return "\n".join(lines)
 
 
 # ── Custom slash commands from .yoyo/commands/ ─────────────────────────

@@ -83,3 +83,34 @@ class TestShowEnvInfo:
             provider=None,
         )
         assert "custom" in output.lower() or "Custom" in output
+
+    def test_shows_max_tokens(self):
+        output = _show_env_info(
+            model="glm-5.1",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            provider="glm",
+            max_tokens=4096,
+        )
+        assert "Max Tokens" in output
+        assert "4096" in output
+
+    def test_shows_temperature(self):
+        output = _show_env_info(
+            model="glm-5.1",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            provider="glm",
+            temperature=0.7,
+        )
+        assert "Temperature" in output
+        assert "0.7" in output
+
+    def test_hides_default_generation_params(self):
+        """When generation params are None, they should not appear."""
+        output = _show_env_info(
+            model="glm-5.1",
+            base_url="https://open.bigmodel.cn/api/paas/v4",
+            provider="glm",
+        )
+        assert "Max Tokens" not in output
+        assert "Temperature" not in output
+        assert "Top P" not in output
