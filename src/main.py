@@ -66,6 +66,24 @@ def parse_args() -> argparse.Namespace:
         help="Auto-approve all destructive tool calls (bash, write_file, edit_file)",
     )
     parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        help="Max tokens in LLM response (default: API default)",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Sampling temperature 0.0-2.0 (default: API default)",
+    )
+    parser.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        help="Nucleus sampling threshold 0.0-1.0 (default: API default)",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -81,6 +99,9 @@ def main() -> None:
             model=args.model,
             base_url=args.base_url,
             provider=args.provider,
+            max_tokens=args.max_tokens,
+            temperature=args.temperature,
+            top_p=args.top_p,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

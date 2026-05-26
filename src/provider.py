@@ -49,6 +49,28 @@ PROVIDER_PRESETS: dict[str, dict[str, str]] = {
 }
 
 
+def _env_int(name: str) -> int | None:
+    """Read an integer from an environment variable, or None if unset/invalid."""
+    val = os.getenv(name)
+    if val is not None:
+        try:
+            return int(val)
+        except ValueError:
+            pass
+    return None
+
+
+def _env_float(name: str) -> float | None:
+    """Read a float from an environment variable, or None if unset/invalid."""
+    val = os.getenv(name)
+    if val is not None:
+        try:
+            return float(val)
+        except ValueError:
+            pass
+    return None
+
+
 def resolve_provider_config(provider_name: str) -> dict[str, str]:
     """Resolve a provider preset name to its configuration.
 
@@ -165,6 +187,9 @@ class GLMProvider:
         base_url: str | None = None,
         model: str | None = None,
         provider: str | None = None,
+        max_tokens: int | None = None,
+        temperature: float | None = None,
+        top_p: float | None = None,
     ):
         # Resolve provider preset if given
         if provider:
@@ -184,6 +209,11 @@ class GLMProvider:
             raise ValueError(
                 f"{env_var} is required. Set it in .env or pass to constructor."
             )
+
+        # Generation parameters: explicit args override env vars
+        self.max_tokens = max_tokens if max_tokens is not None else _env_int("GLM_MAX_TOKENS")
+        self.temperature = temperature if temperature is not None else _env_float("GLM_TEMPERATURE")
+        self.top_p = top_p if top_p is not None else _env_float("GLM_TOP_P")
 
         self.client = OpenAI(
             api_key=self.api_key,
@@ -209,6 +239,15 @@ class GLMProvider:
         if tools:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
+
+        # Only include generation params when explicitly set — APIs may reject
+        # unknown or None-valued params differently
+        if self.max_tokens is not None:
+            kwargs["max_tokens"] = self.max_tokens
+        if self.temperature is not None:
+            kwargs["temperature"] = self.temperature
+        if self.top_p is not None:
+            kwargs["top_p"] = self.top_p
 
         last_error: APIError | None = None
         for attempt in range(self.MAX_RETRIES):
