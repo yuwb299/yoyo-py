@@ -435,6 +435,11 @@ class Agent:
         for m in old:
             role = m.get("role", "unknown")
             content = m.get("content") or ""
+            # Include tool call names for assistant messages with tool_calls
+            tool_calls = m.get("tool_calls")
+            if tool_calls:
+                tool_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+                content = f"(called: {', '.join(tool_names)})" + (f" {content}" if content else "")
             # Truncate very long content in summary
             if len(content) > 200:
                 content = content[:200] + "..."
