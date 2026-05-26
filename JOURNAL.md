@@ -220,3 +220,17 @@ Self-assessed the codebase. Found a data-corruption bug in `edit_file` and ident
 - `7ee8e4e` Day 7: add /history command — show conversation history summary
 - `5856e24` Day 7: add /cost command — estimate API cost from token usage with model pricing
 - `e4e190f` Day 7: session wrap-up
+
+## Day 8 — /review --staged Support, Callable Import Fix
+
+Evolution session started but timed out at 360s. The LLM identified two issues and partially implemented a fix before timeout:
+1. `/review --staged` was claimed in Day 7 journal but not actually implemented in the REPL dispatch.
+2. `Callable` type hint used in `repl.py` without explicit import (worked due to `from __future__ import annotations` but sloppy).
+
+**Changes made:**
+1. **Add `/review --staged` support** — The `_run_review` function now accepts `staged=True` to review only staged changes via `git diff --cached`. The REPL dispatch now handles `/review --staged`. Usage text updated from `[/commit]` to `[--commit | --staged]`. Added `test_review_staged.py` (4 tests).
+2. **Add missing `Callable` import** — Added `from collections.abc import Callable` to `repl.py` for proper type hint support.
+
+**Results:** 373 tests passing (was 369 at start). 4 new tests.
+
+**Commits:** (pending — completed post-timeout by supervisor)

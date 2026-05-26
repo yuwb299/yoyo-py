@@ -8,6 +8,7 @@ import os
 import subprocess
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .agent import Agent, AgentEvent
@@ -281,7 +282,7 @@ async def run_repl(
                 print()
                 continue
             elif cmd.startswith("/review"):
-                # /review with options: --commit
+                # /review with options: --commit, --staged
                 args_str = line[7:].strip()
                 if "--commit" in args_str:
                     review_result = _run_review(commit=True)
@@ -289,8 +290,14 @@ async def run_repl(
                         print(review_result)
                     else:
                         await _run_agent_turn(agent, review_result)
+                elif "--staged" in args_str:
+                    review_result = _run_review(staged=True)
+                    if review_result.startswith("["):
+                        print(review_result)
+                    else:
+                        await _run_agent_turn(agent, review_result)
                 else:
-                    print(f"{YELLOW}Usage: /review [--commit]{RESET}")
+                    print(f"{YELLOW}Usage: /review [--commit | --staged]{RESET}")
                 print()
                 continue
             elif cmd.startswith("/init"):
@@ -1438,11 +1445,12 @@ If the changes look good, say so briefly. Don't fabricate issues.
 ```"""
 
 
-def _run_review(workdir: str | None = None, commit: bool = False) -> str:
+def _run_review(workdir: str | None = None, commit: bool = False, staged: bool = False) -> str:
     """Generate a code review prompt from git changes.
 
-    By default, reviews unstaged + staged changes. With commit=True, reviews
-    the diff of the last commit (HEAD~1..HEAD).
+    By default, reviews unstaged + staged changes.
+    With commit=True, reviews the diff of the last commit (HEAD~1..HEAD).
+    With staged=True, reviews only staged changes (git diff --cached).
 
     Returns the review prompt (to be sent to the LLM), or an error/status message.
     """
@@ -1474,6 +1482,16 @@ def _run_review(workdir: str | None = None, commit: bool = False) -> str:
         prompt = _review_prompt_from_diff(diff_result.stdout)
         if prompt is None:
             return "[No changes in the last commit to review]"
+        return prompt
+
+    if staged:
+        # Review only staged changes
+        diff_cached_result = _run_git("diff", "--cached")
+        if diff_cached_result.returncode != 0:
+            return f"[ERROR] git diff --cached failed: {diff_cached_result.stderr[:200]}"
+        prompt = _review_prompt_from_diff(diff_cached_result.stdout)
+        if prompt is None:
+            return "[No staged changes to review]"
         return prompt
 
     # Review working tree changes (unstaged + staged)
