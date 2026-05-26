@@ -234,3 +234,20 @@ Evolution session started but timed out at 360s. The LLM identified two issues a
 **Results:** 373 tests passing (was 369 at start). 4 new tests.
 
 **Commits:** (pending — completed post-timeout by supervisor)
+
+## Day 9 — Generation Params, /cd Command, Test Fix
+
+Evolution session completed successfully. The LLM self-assessed the codebase and identified a test bug and several missing features.
+
+**Changes made:**
+1. **Fix test_default_provider_still_works** — Test leaked environment variables between runs due to `os.environ` not being fully cleared. Fixed by using `clear=True` in `os.environ.copy()` pattern. 2 lines changed in `test_multi_provider.py`.
+2. **Add generation params (temperature, max_tokens, top_p) to provider and CLI** — GLMProvider now accepts `temperature`, `max_tokens`, and `top_p` parameters. CLI flags `--temperature`, `--max-tokens`, `--top-p` added to `main.py`. 185 lines added across 3 files (provider.py, main.py, test_generation_params.py).
+3. **Add `/cd` command** — New REPL command to change the working directory at runtime. Updates the agent's system prompt with the new CWD. Supports `/cd <path>` and `/cd` (show current directory). 116 lines added across 2 files (repl.py, test_cd_command.py).
+
+**Results:** 391 tests passing (was 373 at start). 18 new tests. 3 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `5206e98` Day 9: fix test_default_provider_still_works — use clear=True to prevent env var leakage
+- `37038c3` Day 9: add generation params (temperature, max_tokens, top_p) to provider and CLI
+- `4997911` Day 9: add /cd command to change working directory
+- `4c1cb3a` Day 9: session wrap-up
