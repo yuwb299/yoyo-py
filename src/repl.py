@@ -218,6 +218,11 @@ async def run_repl(
                 print(_git_undo())
                 print()
                 continue
+            elif cmd.startswith("/cd"):
+                target = line[3:].strip() if len(line) > 3 else ""
+                print(_handle_cd_command(target))
+                print()
+                continue
             elif cmd == "/tree":
                 print(_project_tree())
                 print()
@@ -765,6 +770,34 @@ def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
         return (data["messages"], data["model"], usage)
     except Exception:
         return None
+
+
+def _handle_cd_command(path: str) -> str:
+    """Change the working directory.
+
+    Args:
+        path: Target directory path. Empty string or '~' goes to home directory.
+
+    Returns a confirmation or error message. Actually changes os.getcwd().
+    """
+    # Expand ~ and environment variables
+    target = os.path.expanduser(path) if path else os.path.expanduser("~")
+    target = os.path.expandvars(target)
+    # Resolve relative paths against cwd
+    if not os.path.isabs(target):
+        target = os.path.join(os.getcwd(), target)
+    target = os.path.normpath(target)
+
+    if not os.path.exists(target):
+        return f"[ERROR] Directory not found: {target}"
+    if not os.path.isdir(target):
+        return f"[ERROR] Not a directory: {target}"
+
+    try:
+        os.chdir(target)
+        return f"[OK] Changed directory to {target}"
+    except OSError as e:
+        return f"[ERROR] Cannot change directory: {e}"
 
 
 def _project_tree(path: str = ".", max_depth: int = 4) -> str:
@@ -1813,6 +1846,7 @@ def _print_help() -> None:
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
+    {CYAN}/cd [path]{RESET}       Change working directory (default: home)
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/history{RESET}       Show conversation history summary
