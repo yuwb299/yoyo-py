@@ -1884,8 +1884,9 @@ def _print_help() -> None:
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/test{RESET}          Run project tests
     {CYAN}/fix{RESET}           Auto-fix lint/format errors
-    {CYAN}/review{RESET}        AI code review of current changes
-    {CYAN}/review --commit{RESET} Review the last commit
+    {CYAN}/review{RESET}            AI code review of current changes
+    {CYAN}/review --commit{RESET}   Review the last commit
+    {CYAN}/review --staged{RESET}   Review staged changes
     {CYAN}/init{RESET}          Generate YOYO.md context file (--force to overwrite)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
