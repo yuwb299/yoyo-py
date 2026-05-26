@@ -68,9 +68,10 @@ class TestResolveProviderConfig:
 class TestGLMProviderWithPreset:
     """Test that GLMProvider works with different provider configs."""
 
-    @patch.dict(os.environ, {"GLM_API_KEY": "test-key"})
+    @patch.dict(os.environ, {"GLM_API_KEY": "test-key"}, clear=True)
     def test_default_provider_still_works(self):
-        """Existing GLM provider creation should still work."""
+        """Existing GLM provider creation should still work with defaults."""
+        # clear=True ensures no env leakage (e.g. GLM_BASE_URL override)
         provider = GLMProvider()
         assert provider.model == "glm-5.1"
         assert provider.base_url == "https://open.bigmodel.cn/api/paas/v4"
