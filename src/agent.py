@@ -335,8 +335,19 @@ class Agent:
 
     @staticmethod
     def _estimate_tokens(messages: list[dict[str, Any]]) -> int:
-        """Rough token estimate: ~3 chars per token (conservative for mixed text)."""
-        total_chars = sum(len(m.get("content") or "") for m in messages)
+        """Rough token estimate: ~3 chars per token (conservative for mixed text).
+
+        Counts both message content and tool_calls arguments — tool-heavy
+        conversations can have substantial arguments that the API charges for.
+        """
+        total_chars = 0
+        for m in messages:
+            total_chars += len(m.get("content") or "")
+            # Tool call arguments consume tokens too — often large JSON blobs
+            for tc in m.get("tool_calls", []):
+                func = tc.get("function", {})
+                total_chars += len(func.get("name", ""))
+                total_chars += len(func.get("arguments", ""))
         return max(total_chars // 3, 1) if total_chars else 0
 
     @staticmethod
