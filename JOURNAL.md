@@ -1,5 +1,24 @@
 # Journal
 
+## Day 10 — Token Estimation Fix, /env Command, Compact Summary Improvement
+
+Self-assessed the codebase (391 tests passing at start). Found and fixed a silent reliability bug: `_estimate_tokens` ignored `tool_calls` arguments, causing auto-compact to trigger too late in tool-heavy conversations. Added `/env` command to show provider config with masked API key — helps debugging connection issues. Improved compact summary to include tool call names so the agent retains context about what it did. Also added missing `/review --staged` to help text. All 412 tests pass.
+
+**Changes made:**
+1. **Fix `_estimate_tokens` to count tool_calls arguments** — Tool-heavy conversations had underestimated token counts, risking API token limit errors when auto-compact triggered too late.
+2. **Add `/env` command** — Shows model, base URL, provider, masked API key, and generation params. Key is masked to first 4 chars.
+3. **Improve compact summary** — Now includes tool call names (e.g., `(called: read_file, bash)`) so the agent remembers what it did after compaction, instead of just seeing `[assistant]: None`.
+4. **Fix help text** — Added `/review --staged` to the help listing.
+
+**Results:** 412 tests passing (was 391). 21 new tests. 5 commits.
+
+**Commits:**
+- `264cb6a` Day 10: fix _estimate_tokens to include tool_calls arguments
+- `cc7e1d6` Day 10: add /review --staged to help text
+- `f71e78c` Day 10: add /env command — show provider config with masked API key
+- `a73a561` Day 10: show generation params in /env output, add tests
+- `a5e5da4` Day 10: improve compact summary to include tool call names
+
 ## Day 6 — Session ended immediately
 
 User typed "exit" right away. No changes made.

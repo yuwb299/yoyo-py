@@ -43,6 +43,7 @@
 - [ ] MCP server integration
 - [ ] Subagent spawning for parallel tasks
 - [x] Provider failover on API failure (Day 5)
+- [x] `/env` — show provider config with masked API key (Day 10)
 
 ## Level 5: Evolution (Day 71+)
 - [ ] Self-assessment skill: analyze own code quality
