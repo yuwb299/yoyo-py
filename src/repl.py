@@ -249,6 +249,15 @@ async def run_repl(
                 print(f"{DIM}  tokens: {agent.state.usage}{RESET}")
                 print(f"{DIM}  skills: {skills.count()}{RESET}\n")
                 continue
+            elif cmd == "/env":
+                print(_show_env_info(
+                    model=provider.model,
+                    base_url=provider.base_url,
+                    provider=getattr(provider, '_provider_name', None),
+                    api_key=provider.api_key,
+                ))
+                print()
+                continue
             elif cmd == "/diff":
                 print(_git_diff_summary())
                 print()
@@ -1786,6 +1795,52 @@ def _estimate_cost(usage: Usage, model: str) -> str:
     )
 
 
+# ── /env command ──────────────────────────────────────────────────────
+
+def _mask_api_key(key: str) -> str:
+    """Mask an API key, showing only the first 4 characters.
+
+    Returns '***' for very short keys and '(not set)' for empty keys.
+    This prevents accidental exposure of secrets in terminal output.
+    """
+    if not key:
+        return "(not set)"
+    if len(key) <= 4:
+        return "***"
+    return key[:4] + "*" * (len(key) - 4)
+
+
+def _show_env_info(
+    model: str,
+    base_url: str,
+    provider: str | None,
+    api_key: str = "",
+) -> str:
+    """Show current provider configuration for debugging.
+
+    Masks the API key to prevent accidental exposure while still
+    letting the user verify they're using the right key.
+
+    Args:
+        model: Current model name.
+        base_url: API base URL.
+        provider: Provider preset name (None for custom).
+        api_key: API key (will be masked in output).
+
+    Returns a formatted string with config details.
+    """
+    provider_label = provider if provider else "custom"
+    masked_key = _mask_api_key(api_key)
+
+    return (
+        f"{BOLD}Provider Config{RESET}\n"
+        f"  Provider: {provider_label}\n"
+        f"  Model:    {model}\n"
+        f"  Base URL: {base_url}\n"
+        f"  API Key:  {masked_key}"
+    )
+
+
 # ── Custom slash commands from .yoyo/commands/ ─────────────────────────
 
 def _load_custom_commands(workdir: str | None = None) -> dict[str, dict[str, str]]:
@@ -1900,6 +1955,7 @@ def _print_help() -> None:
     {CYAN}/history{RESET}       Show conversation history summary
     {CYAN}/cost{RESET}          Estimate API cost from token usage
     {CYAN}/status{RESET}         Show session info
+    {CYAN}/env{RESET}            Show provider config (model, base URL, API key hint)
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
     {CYAN}/forget <id>{RESET}    Forget a remembered fact by ID
