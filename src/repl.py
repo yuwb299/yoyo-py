@@ -10,6 +10,7 @@ import re
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from .agent import Agent, AgentEvent
 from .provider import GLMProvider, Usage
@@ -549,49 +550,69 @@ def _truncate_str(s: str, max_len: int) -> str:
     return s[:max_len] + "..."
 
 
+def _run_git(*args: str, timeout: int = 10, workdir: str | None = None) -> subprocess.CompletedProcess:
+    """Run a git command and return the CompletedProcess result.
+
+    This is the shared git helper used by all git-related REPL functions.
+    Extracted from 7 duplicated local function definitions to reduce code duplication
+    and make future git-related features easier to add.
+
+    Args:
+        *args: Git subcommand and arguments (e.g. "branch", "--show-current").
+        timeout: Max seconds to wait (default 10).
+        workdir: Working directory (default: None = current directory).
+
+    Returns:
+        subprocess.CompletedProcess with returncode, stdout, stderr.
+    """
+    kwargs: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout,
+    }
+    if workdir is not None:
+        kwargs["cwd"] = workdir
+    return subprocess.run(["git"] + list(args), **kwargs)
+
+
 def _git_context() -> str:
     """Collect git context for the system prompt: branch and recently changed files.
 
     Returns a formatted string for the system prompt, or empty string if not in a git repo.
     This helps the agent understand what files the user has been working on recently.
     """
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
+    # Use shorter timeout for system prompt context — this runs on every startup
+    _git = lambda *args: _run_git(*args, timeout=5)
 
     # Check we're in a git repo
-    check = _run_git("rev-parse", "--is-inside-work-tree")
+    check = _git("rev-parse", "--is-inside-work-tree")
     if check.returncode != 0:
         return ""
 
     # Get current branch name
-    branch_result = _run_git("branch", "--show-current")
+    branch_result = _git("branch", "--show-current")
     if branch_result.returncode == 0 and branch_result.stdout.strip():
         branch = branch_result.stdout.strip()
     else:
         # Detached HEAD — show short commit hash instead
-        head_result = _run_git("rev-parse", "--short", "HEAD")
+        head_result = _git("rev-parse", "--short", "HEAD")
         branch = head_result.stdout.strip() if head_result.returncode == 0 else "detached"
 
     # Get recently changed files (modified + untracked)
     changed_files = []
-    diff_result = _run_git("diff", "--name-only")
+    diff_result = _git("diff", "--name-only")
     if diff_result.returncode == 0 and diff_result.stdout.strip():
         changed_files.extend(diff_result.stdout.strip().splitlines())
 
     # Staged changes too
-    diff_cached = _run_git("diff", "--cached", "--name-only")
+    diff_cached = _git("diff", "--cached", "--name-only")
     if diff_cached.returncode == 0 and diff_cached.stdout.strip():
         for f in diff_cached.stdout.strip().splitlines():
             if f not in changed_files:
                 changed_files.append(f)
 
     # Untracked files
-    untracked = _run_git("ls-files", "--others", "--exclude-standard")
+    untracked = _git("ls-files", "--others", "--exclude-standard")
     if untracked.returncode == 0 and untracked.stdout.strip():
         for f in untracked.stdout.strip().splitlines():
             if f not in changed_files:
@@ -623,14 +644,6 @@ def _git_diff_summary() -> str:
         "C": "copied",
         "T": "typechange",
     }
-
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
 
     # Check we're in a git repo
     check = _run_git("rev-parse", "--is-inside-work-tree")
@@ -693,13 +706,6 @@ def _git_commit(message: str) -> str:
 
     Returns a human-readable result or error message.
     """
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
 
     # Check we're in a git repo
     check = _run_git("rev-parse", "--is-inside-work-tree")
@@ -948,22 +954,13 @@ def _git_undo(workdir: str | None = None) -> str:
     """
     cwd = workdir or os.getcwd()
 
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=cwd,
-        )
-
     # Check we're in a git repo
-    check = _run_git("rev-parse", "--is-inside-work-tree")
+    check = _run_git("rev-parse", "--is-inside-work-tree", workdir=cwd)
     if check.returncode != 0:
         return "[ERROR] Not a git repo"
 
     # Check for any changes
-    status = _run_git("status", "--porcelain")
+    status = _run_git("status", "--porcelain", workdir=cwd)
     if status.returncode != 0:
         return f"[ERROR] git status failed: {status.stderr.strip()}"
 
@@ -991,13 +988,13 @@ def _git_undo(workdir: str | None = None) -> str:
 
     # Restore tracked files to HEAD state
     if reverted:
-        checkout = _run_git("checkout", "HEAD", "--", *reverted)
+        checkout = _run_git("checkout", "HEAD", "--", *reverted, workdir=cwd)
         if checkout.returncode != 0:
             return f"[ERROR] git checkout failed: {checkout.stderr.strip()}"
 
     # Remove untracked files
     if cleaned:
-        clean = _run_git("clean", "-f", "--", *cleaned)
+        clean = _run_git("clean", "-f", "--", *cleaned, workdir=cwd)
         if clean.returncode != 0:
             return f"[ERROR] git clean failed: {clean.stderr.strip()}"
 
@@ -1560,27 +1557,18 @@ def _run_review(workdir: str | None = None, commit: bool = False, staged: bool =
     """
     cwd = workdir or os.getcwd()
 
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=cwd,
-        )
-
     # Check we're in a git repo
-    check = _run_git("rev-parse", "--is-inside-work-tree")
+    check = _run_git("rev-parse", "--is-inside-work-tree", workdir=cwd)
     if check.returncode != 0:
         return "[Not a git repo]"
 
     if commit:
         # Review the last commit
-        diff_result = _run_git("diff", "HEAD~1", "HEAD")
+        diff_result = _run_git("diff", "HEAD~1", "HEAD", workdir=cwd)
         if diff_result.returncode != 0:
             # Might be the first commit with no parent
             # Try diff against empty tree
-            diff_result = _run_git("diff", "--cached", "HEAD")
+            diff_result = _run_git("diff", "--cached", "HEAD", workdir=cwd)
             if diff_result.returncode != 0:
                 return f"[ERROR] Could not get commit diff: {diff_result.stderr[:200]}"
         prompt = _review_prompt_from_diff(diff_result.stdout)
@@ -1590,7 +1578,7 @@ def _run_review(workdir: str | None = None, commit: bool = False, staged: bool =
 
     if staged:
         # Review only staged changes
-        diff_cached_result = _run_git("diff", "--cached")
+        diff_cached_result = _run_git("diff", "--cached", workdir=cwd)
         if diff_cached_result.returncode != 0:
             return f"[ERROR] git diff --cached failed: {diff_cached_result.stderr[:200]}"
         prompt = _review_prompt_from_diff(diff_cached_result.stdout)
@@ -1599,8 +1587,8 @@ def _run_review(workdir: str | None = None, commit: bool = False, staged: bool =
         return prompt
 
     # Review working tree changes (unstaged + staged)
-    diff_result = _run_git("diff")
-    diff_cached_result = _run_git("diff", "--cached")
+    diff_result = _run_git("diff", workdir=cwd)
+    diff_cached_result = _run_git("diff", "--cached", workdir=cwd)
 
     if diff_result.returncode != 0 or diff_cached_result.returncode != 0:
         return f"[ERROR] git diff failed: {diff_result.stderr[:200]}"
@@ -1708,24 +1696,15 @@ def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
     """
     cwd = workdir or os.getcwd()
 
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=cwd,
-        )
-
     # Check we're in a git repo
-    check = _run_git("rev-parse", "--is-inside-work-tree")
+    check = _run_git("rev-parse", "--is-inside-work-tree", workdir=cwd)
     if check.returncode != 0:
         return "[Not a git repo]"
 
     # Format: short hash | subject | author name | relative date
     # Using | as separator for reliable parsing
     log_format = "%h|%s|%an|%cr"
-    log_result = _run_git("log", f"-{count}", f"--format={log_format}")
+    log_result = _run_git("log", f"-{count}", f"--format={log_format}", workdir=cwd)
 
     if log_result.returncode != 0:
         return f"[ERROR] git log failed: {log_result.stderr[:200]}"
@@ -1990,23 +1969,14 @@ def _run_pr_description(workdir: str | None = None) -> str:
     """
     cwd = workdir or os.getcwd()
 
-    def _run_git(*args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["git"] + list(args),
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=cwd,
-        )
-
     # Check we're in a git repo
-    check = _run_git("rev-parse", "--is-inside-work-tree")
+    check = _run_git("rev-parse", "--is-inside-work-tree", workdir=cwd)
     if check.returncode != 0:
         return "[Not a git repo]"
 
     # Get unstaged + staged diffs
-    diff_result = _run_git("diff")
-    diff_cached_result = _run_git("diff", "--cached")
+    diff_result = _run_git("diff", workdir=cwd)
+    diff_cached_result = _run_git("diff", "--cached", workdir=cwd)
 
     if diff_result.returncode != 0 or diff_cached_result.returncode != 0:
         return f"[ERROR] git diff failed"
@@ -2027,12 +1997,12 @@ def _run_pr_description(workdir: str | None = None) -> str:
         combined = combined[:_PR_DIFF_LIMIT] + "\n... [diff truncated]"
 
     # Get current branch name
-    branch_result = _run_git("branch", "--show-current")
+    branch_result = _run_git("branch", "--show-current", workdir=cwd)
     branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
 
     # Get number of commits ahead of main/master
     for base_branch in ("main", "master"):
-        count_result = _run_git("rev-list", "--count", f"{base_branch}..HEAD")
+        count_result = _run_git("rev-list", "--count", f"{base_branch}..HEAD", workdir=cwd)
         if count_result.returncode == 0:
             commit_count = int(count_result.stdout.strip())
             break
@@ -2041,11 +2011,11 @@ def _run_pr_description(workdir: str | None = None) -> str:
 
     # Get recent commit messages (for PR summary)
     log_count = max(commit_count, 10)
-    log_result = _run_git("log", f"-{log_count}", "--format=%s")
+    log_result = _run_git("log", f"-{log_count}", "--format=%s", workdir=cwd)
     commit_messages = log_result.stdout.strip() if log_result.returncode == 0 else ""
 
     # Build diff stat for quick overview
-    stat_result = _run_git("diff", "--stat")
+    stat_result = _run_git("diff", "--stat", workdir=cwd)
     stat = stat_result.stdout.strip() if stat_result.returncode == 0 else ""
 
     # Build the PR description prompt
