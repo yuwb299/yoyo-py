@@ -88,11 +88,33 @@ def parse_args() -> argparse.Namespace:
         action="version",
         version=f"%(prog)s {__version__}",
     )
+    parser.add_argument(
+        "--list-providers",
+        action="store_true",
+        help="List available provider presets and exit",
+    )
     return parser.parse_args()
+
+
+def _print_providers() -> None:
+    """Print available provider presets with their env vars and default models."""
+    from .provider import PROVIDER_PRESETS
+
+    print("Available provider presets:")
+    print()
+    for name, config in sorted(PROVIDER_PRESETS.items()):
+        print(f"  {name:12} env: {config['env_key']:20} model: {config['default_model']}")
+    print()
+    print("Usage: --provider <name>")
+    print("Set the API key via environment variable or .env file.")
 
 
 def main() -> None:
     args = parse_args()
+
+    if args.list_providers:
+        _print_providers()
+        sys.exit(0)
 
     try:
         provider = GLMProvider(
