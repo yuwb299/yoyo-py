@@ -38,7 +38,7 @@
 - [x] Multiple provider support (Anthropic, OpenAI, DeepSeek, etc.) (Day 5)
 - [ ] Extended thinking / reasoning depth control
 - [x] `/review` — AI code review of changes (Day 7)
-- [ ] `/pr` — full PR workflow
+- [x] `/pr` — full PR workflow (Day 11)
 - [x] Custom slash commands from `.yoyo/commands/` (Day 5)
 - [ ] MCP server integration
 - [ ] Subagent spawning for parallel tasks
