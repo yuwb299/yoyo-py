@@ -235,7 +235,8 @@ async def run_repl(
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
             elif cmd == "/history":
-                print(_format_history(agent.state.messages))
+                show_tokens = "--tokens" in cmd
+                print(_format_history(agent.state.messages, show_tokens=show_tokens))
                 print()
                 continue
             elif cmd == "/cost":
@@ -1621,7 +1622,7 @@ def _run_review(workdir: str | None = None, commit: bool = False, staged: bool =
 
 # ── /log command ────────────────────────────────────────────────────────
 
-def _format_history(messages: list[dict]) -> str:
+def _format_history(messages: list[dict], show_tokens: bool = False) -> str:
     """Format conversation history as a readable summary.
 
     Shows each message's role, a content preview (truncated), and tool call
@@ -1629,6 +1630,7 @@ def _format_history(messages: list[dict]) -> str:
 
     Args:
         messages: The conversation messages list.
+        show_tokens: If True, show estimated token count per message.
 
     Returns a formatted string.
     """
@@ -1641,6 +1643,13 @@ def _format_history(messages: list[dict]) -> str:
         role = msg.get("role", "unknown")
         content = msg.get("content")
         tool_calls = msg.get("tool_calls")
+
+        # Token estimation for this message
+        token_str = ""
+        if show_tokens:
+            from .agent import Agent
+            tok = Agent._estimate_tokens([msg])
+            token_str = f" {DIM}~{tok}t{RESET}"
 
         # Role icon
         role_icons = {
@@ -1659,7 +1668,7 @@ def _format_history(messages: list[dict]) -> str:
             preview = (content or "")[:80]
             if len((content or "")) > 80:
                 preview += "..."
-            lines.append(f"  {icon} {DIM}tool [{tool_call_id}]{RESET} {preview}")
+            lines.append(f"  {icon} {DIM}tool [{tool_call_id}]{RESET}{token_str} {preview}")
             continue
         elif tool_calls:
             # Assistant with tool calls — show which tools
@@ -1668,7 +1677,7 @@ def _format_history(messages: list[dict]) -> str:
             text_preview = ""
             if content:
                 text_preview = f": {(content)[:60]}"
-            lines.append(f"  {icon} {CYAN}assistant{RESET} → {YELLOW}{tools_str}{RESET}{text_preview}")
+            lines.append(f"  {icon} {CYAN}assistant{RESET} → {YELLOW}{tools_str}{RESET}{token_str}{text_preview}")
             continue
         else:
             # Regular user or assistant message
@@ -1677,7 +1686,13 @@ def _format_history(messages: list[dict]) -> str:
                 preview += "..."
 
         role_color = CYAN if role == "user" else (GREEN if role == "assistant" else DIM)
-        lines.append(f"  {icon} {role_color}{role}{RESET} {preview}")
+        lines.append(f"  {icon} {role_color}{role}{RESET}{token_str} {preview}")
+
+    # Show total token estimate if requested
+    if show_tokens:
+        from .agent import Agent
+        total_tokens = Agent._estimate_tokens(messages)
+        lines.append(f"\n  {DIM}Total estimated tokens: ~{total_tokens}{RESET}")
 
     return "\n".join(lines)
 
@@ -2090,7 +2105,7 @@ def _print_help() -> None:
     {CYAN}/cd [path]{RESET}       Change working directory (default: home)
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
-    {CYAN}/history{RESET}       Show conversation history summary
+    {CYAN}/history{RESET}       Show conversation history summary (--tokens for token estimates)
     {CYAN}/cost{RESET}          Estimate API cost from token usage
     {CYAN}/status{RESET}         Show session info
     {CYAN}/env{RESET}            Show provider config (model, base URL, API key hint)
