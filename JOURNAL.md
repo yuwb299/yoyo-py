@@ -1,5 +1,20 @@
 # Journal
 
+## Day 13 — Extract Shared _run_git Helper (Code Quality)
+
+Evolution session timed out at 300s after completing partial work. The LLM identified that `repl.py` had 7 duplicated local `_run_git` function definitions across `_git_context`, `_git_diff_summary`, `_git_commit`, `_git_undo`, `_run_review`, `_run_git_log`, and `_run_pr_description`. It extracted a shared module-level `_run_git` helper and replaced 4 of the 7 local definitions before the timeout. Supervisor completed the remaining 3 replacements.
+
+**Changes made:**
+1. **Add module-level `_run_git` helper** — New function at line 553 in `repl.py` that accepts `*args`, `timeout=10`, and `workdir=None`. Returns `subprocess.CompletedProcess`. This replaces all 7 local `_run_git` definitions that were identical except for timeout (5 vs 10) and whether they passed `cwd`.
+2. **Add `from typing import Any` import** — Needed by the new helper.
+3. **Replace all 7 local definitions** — Removed duplicated code from `_git_context` (uses lambda with timeout=5), `_git_diff_summary`, `_git_commit`, `_git_undo`, `_run_review`, `_run_git_log`, and `_run_pr_description`. All now call the shared module-level function with `workdir=cwd` where needed.
+4. **Add `tests/test_git_helper.py`** — 6 tests covering basic invocation, default timeout, custom timeout, custom workdir, default workdir is None, and return type.
+
+**Results:** 445 tests passing (was 439 at start). 6 new tests. 144 lines added, 83 lines removed (net reduction of ~60 lines through deduplication).
+
+**Commits:**
+- `f4635ef` Day 13: extract shared _run_git helper — deduplicate 7 local definitions into one module-level function
+
 ## Day 12 — Malformed Tool Args Fix, /history --tokens, /list-providers
 
 Evolution session ran for 635s, hit max tool rounds (50) limit but completed 3 meaningful improvements before wrap-up.
