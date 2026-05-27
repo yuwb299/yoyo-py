@@ -301,6 +301,14 @@ class FailoverProvider:
         self.providers = providers
         # Expose the first provider's model as the "active" model
         self.model = providers[0].model
+        # Expose config attributes for /env — show first provider's values
+        # with "_provider_name" set to "failover" to distinguish from single providers
+        self._provider_name = "failover"
+        self.api_key = providers[0].api_key
+        self.base_url = providers[0].base_url
+        self.max_tokens = providers[0].max_tokens
+        self.temperature = providers[0].temperature
+        self.top_p = providers[0].top_p
 
     def chat(
         self,

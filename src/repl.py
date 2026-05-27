@@ -1839,6 +1839,8 @@ def _show_env_info(
     Returns a formatted string with config details.
     """
     provider_label = provider if provider else "custom"
+    if provider_label == "failover":
+        provider_label = "failover (multi-provider)"
     masked_key = _mask_api_key(api_key)
 
     lines = [
