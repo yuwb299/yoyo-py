@@ -321,6 +321,17 @@ async def run_repl(
                     print(f"{YELLOW}Usage: /review [--commit | --staged]{RESET}")
                 print()
                 continue
+            elif cmd == "/pr":
+                # Generate PR description from current changes
+                pr_result = _run_pr_description()
+                if pr_result.startswith("["):
+                    # Error/status message — just display it
+                    print(pr_result)
+                else:
+                    # PR description prompt — send to agent
+                    await _run_agent_turn(agent, pr_result)
+                print()
+                continue
             elif cmd.startswith("/init"):
                 force = "--force" in cmd
                 print(_run_init_command(force=force))
@@ -1948,6 +1959,111 @@ def _resolve_custom_command(
 
 
 
+# ── /pr command ────────────────────────────────────────────────────────
+
+# Max diff size for PR description — prevents blowing up the prompt
+_PR_DIFF_LIMIT = 30000
+
+
+def _run_pr_description(workdir: str | None = None) -> str:
+    """Generate a PR description from git changes.
+
+    Collects diff (staged + unstaged), branch name, recent commit log,
+    and builds a structured PR description prompt for the agent to refine.
+
+    Returns the PR description prompt, or an error/status message.
+    """
+    cwd = workdir or os.getcwd()
+
+    def _run_git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["git"] + list(args),
+            capture_output=True,
+            text=True,
+            timeout=10,
+            cwd=cwd,
+        )
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[Not a git repo]"
+
+    # Get unstaged + staged diffs
+    diff_result = _run_git("diff")
+    diff_cached_result = _run_git("diff", "--cached")
+
+    if diff_result.returncode != 0 or diff_cached_result.returncode != 0:
+        return f"[ERROR] git diff failed"
+
+    combined = ""
+    if diff_result.stdout.strip():
+        combined += diff_result.stdout.strip()
+    if diff_cached_result.stdout.strip():
+        if combined:
+            combined += "\n\n"
+        combined += diff_cached_result.stdout.strip()
+
+    if not combined:
+        return "[No changes to describe — working tree clean]"
+
+    # Truncate large diffs
+    if len(combined) > _PR_DIFF_LIMIT:
+        combined = combined[:_PR_DIFF_LIMIT] + "\n... [diff truncated]"
+
+    # Get current branch name
+    branch_result = _run_git("branch", "--show-current")
+    branch = branch_result.stdout.strip() if branch_result.returncode == 0 else "unknown"
+
+    # Get number of commits ahead of main/master
+    for base_branch in ("main", "master"):
+        count_result = _run_git("rev-list", "--count", f"{base_branch}..HEAD")
+        if count_result.returncode == 0:
+            commit_count = int(count_result.stdout.strip())
+            break
+    else:
+        commit_count = 0
+
+    # Get recent commit messages (for PR summary)
+    log_count = max(commit_count, 10)
+    log_result = _run_git("log", f"-{log_count}", "--format=%s")
+    commit_messages = log_result.stdout.strip() if log_result.returncode == 0 else ""
+
+    # Build diff stat for quick overview
+    stat_result = _run_git("diff", "--stat")
+    stat = stat_result.stdout.strip() if stat_result.returncode == 0 else ""
+
+    # Build the PR description prompt
+    parts = [
+        "Generate a clear, concise PR description for the following changes.",
+        "",
+        f"**Branch:** `{branch}`",
+    ]
+
+    if commit_count:
+        parts.append(f"**Commits in this branch:** {commit_count}")
+
+    if commit_messages:
+        parts.append(f"\n**Recent commit messages:**")
+        for line in commit_messages.splitlines()[:10]:
+            parts.append(f"  - {line}")
+
+    if stat:
+        parts.append(f"\n**Files changed:**")
+        parts.append(f"```\n{stat}\n```")
+
+    parts.append(f"\n**Full diff:**")
+    parts.append(f"```\n{combined}\n```")
+
+    parts.append("\nPlease generate a PR description with:")
+    parts.append("1. A clear **title** (under 72 chars)")
+    parts.append("2. A **summary** of what this PR does and why")
+    parts.append("3. **Changes** — bullet list of key changes")
+    parts.append("4. **Testing** — how the changes were tested (or should be)")
+
+    return "\n".join(parts)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -1963,6 +2079,7 @@ def _print_help() -> None:
     {CYAN}/review{RESET}            AI code review of current changes
     {CYAN}/review --commit{RESET}   Review the last commit
     {CYAN}/review --staged{RESET}   Review staged changes
+    {CYAN}/pr{RESET}             Generate PR description from current changes
     {CYAN}/init{RESET}          Generate YOYO.md context file (--force to overwrite)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
