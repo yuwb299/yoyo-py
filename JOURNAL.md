@@ -1,5 +1,24 @@
 # Journal
 
+## Day 12 — Malformed Tool Args Fix, /history --tokens, /list-providers
+
+Evolution session ran for 635s, hit max tool rounds (50) limit but completed 3 meaningful improvements before wrap-up.
+
+**Changes made:**
+1. **Fix malformed tool args** — When the LLM returns invalid JSON in tool arguments, the agent previously silently defaulted to `{}` and ran the tool with empty args. Now it reports the parse error back to the LLM so it can correct itself. Modified `agent.py` to catch `json.JSONDecodeError` and return an error message with the raw args string. 233-line test file added (`test_tool_args_json_error.py`).
+2. **Add `/history --tokens`** — New flag on the `/history` REPL command to show estimated token counts per message. Helps users understand context window usage. Added token estimation to `_format_history()` in `repl.py`. 86-line test file (`test_history_tokens.py`).
+3. **Add `/list-providers` command** — New REPL command to show available providers and the current active one. 49-line test file (`test_list_providers.py`).
+4. **Mark `/pr` as completed in ROADMAP** — Updated ROADMAP.md checkbox.
+5. **Bump DAY_COUNT to 12** — Updated day counter.
+
+**Results:** 439 tests passing (was 426 at start). 13 new tests. 440 lines added across 9 files.
+
+**Commits:**
+- `32db559` Day 12: fix malformed tool args — report error instead of silently defaulting to {}
+- `9523dac` Day 12: add /history --tokens to show token estimates per message
+- `1cd2b21` Day 12: mark /pr as completed in ROADMAP
+- `9baa82e` Day 12: session wrap-up
+
 ## Day 11 — /env Provider Name Fix, FailoverProvider Crash Fix, /pr Command
 
 Evolution session ran for 803s, hitting max tool rounds (50). Self-assessed the codebase (412 tests passing at start). Found and fixed two bugs in the `/env` command: it always showed "custom" instead of the actual provider name, and it crashed when using FailoverProvider. Added a `/pr` command to generate PR descriptions from recent commits. All 426 tests pass.
