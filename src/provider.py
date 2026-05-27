@@ -191,6 +191,9 @@ class GLMProvider:
         temperature: float | None = None,
         top_p: float | None = None,
     ):
+        # Store provider preset name so /env can show which preset is active
+        self._provider_name = provider if provider else None
+
         # Resolve provider preset if given
         if provider:
             preset = resolve_provider_config(provider)
