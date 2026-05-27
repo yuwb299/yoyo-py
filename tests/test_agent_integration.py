@@ -297,11 +297,12 @@ class TestAgentLoopIntegration:
             tool_schemas=[{"type": "function", "function": {"name": "bash", "parameters": {}}}],
         )
 
-        # Should not crash — malformed args become empty dict
+        # Malformed JSON now produces a TOOL_END error directly (no TOOL_START)
         events = asyncio.get_event_loop().run_until_complete(_collect_events(agent, "bad args"))
-        # The tool will be called with no args, which is fine
-        tool_start_events = [(e, d) for e, d in events if e == AgentEvent.TOOL_START]
-        assert len(tool_start_events) == 1
+        tool_end_events = [(e, d) for e, d in events if e == AgentEvent.TOOL_END]
+        assert len(tool_end_events) == 1
+        assert tool_end_events[0][1]["is_error"] is True
+        assert "Malformed JSON" in tool_end_events[0][1]["output"]
 
     def test_conversation_state_preserved(self):
         """Messages accumulate correctly across tool rounds."""

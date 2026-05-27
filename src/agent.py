@@ -251,7 +251,28 @@ class Agent:
                 try:
                     tool_args = json.loads(tool_args_str)
                 except json.JSONDecodeError:
-                    tool_args = {}
+                    if not tool_args_str:
+                        # Empty or None args — common when API sends no arguments
+                        # for tools with all-optional params (e.g. list_files)
+                        tool_args = {}
+                    else:
+                        # Truly malformed JSON — include the raw string so the LLM
+                        # can see what went wrong and correct its output
+                        error_msg = (
+                            f"Malformed JSON in tool arguments: {tool_args_str!r}"
+                        )
+                        yield (
+                            AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": error_msg, "is_error": True},
+                        )
+                        self.state.messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": tool_call_id,
+                                "content": error_msg,
+                            }
+                        )
+                        continue
 
                 yield (AgentEvent.TOOL_START, {"name": tool_name, "args": tool_args})
 
