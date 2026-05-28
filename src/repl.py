@@ -235,6 +235,22 @@ async def run_repl(
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
+            elif cmd == "/config" or cmd.startswith("/config "):
+                # View or set generation parameters at runtime
+                config_args = line[7:].strip() if len(line) > 7 else ""
+                output, updates = _handle_config_command(
+                    args_str=config_args,
+                    temperature=provider.temperature,
+                    max_tokens=provider.max_tokens,
+                    top_p=provider.top_p,
+                    model=provider.model,
+                )
+                # Apply updates to provider
+                for key, value in updates.items():
+                    setattr(provider, key, value)
+                print(output)
+                print()
+                continue
             elif cmd == "/history" or cmd.startswith("/history "):
                 # Use original line (not lowercase cmd) to preserve --tokens flag
                 show_tokens = "--tokens" in line
@@ -2047,6 +2063,75 @@ def _run_pr_description(workdir: str | None = None) -> str:
     return "\n".join(parts)
 
 
+def _handle_config_command(
+    args_str: str,
+    temperature: float | None,
+    max_tokens: int | None,
+    top_p: float | None,
+    model: str,
+) -> tuple[str, dict[str, Any]]:
+    """Handle the /config command — view or set generation parameters.
+
+    Args:
+        args_str: The arguments after /config (empty = show all, "key value" = set).
+        temperature: Current temperature setting.
+        max_tokens: Current max_tokens setting.
+        top_p: Current top_p setting.
+        model: Current model name.
+
+    Returns:
+        Tuple of (output_string, updates_dict).
+        updates_dict contains only the params that were changed.
+    """
+    updates: dict[str, Any] = {}
+
+    if not args_str.strip():
+        # Show current config
+        def _fmt_val(val, default_label="API default"):
+            return str(val) if val is not None else f"{DIM}{default_label}{RESET}"
+
+        lines = [
+            f"{BOLD}Generation Config{RESET} — {model}",
+            f"  temperature: {_fmt_val(temperature)}",
+            f"  max_tokens:  {_fmt_val(max_tokens)}",
+            f"  top_p:       {_fmt_val(top_p)}",
+            "",
+            f"  {DIM}Set with: /config <param> <value>{RESET}",
+            f"  {DIM}Params: temperature (0.0-2.0), max_tokens (int), top_p (0.0-1.0){RESET}",
+        ]
+        return "\n".join(lines), updates
+
+    # Parse "key value" format
+    parts = args_str.strip().split(maxsplit=1)
+    if len(parts) != 2:
+        return f"{YELLOW}Usage: /config <param> <value> — or /config to view current settings{RESET}", updates
+
+    key, val_str = parts
+    valid_params = {"temperature", "max_tokens", "top_p"}
+    if key not in valid_params:
+        return (
+            f"{YELLOW}Unknown parameter: {key}{RESET}\n"
+            f"  Valid parameters: {', '.join(sorted(valid_params))}"
+        ), updates
+
+    try:
+        if key == "max_tokens":
+            value = int(val_str)
+            if value < 1:
+                return f"{RED}max_tokens must be a positive integer{RESET}", updates
+        else:
+            value = float(val_str)
+            if key == "temperature" and not (0.0 <= value <= 2.0):
+                return f"{RED}temperature must be between 0.0 and 2.0{RESET}", updates
+            if key == "top_p" and not (0.0 <= value <= 1.0):
+                return f"{RED}top_p must be between 0.0 and 1.0{RESET}", updates
+    except ValueError:
+        return f"{RED}Invalid value: {val_str!r} — expected a number{RESET}", updates
+
+    updates[key] = value
+    return f"{GREEN}[OK] {key} set to {value}{RESET}", updates
+
+
 def _format_providers_list(active_model: str | None = None) -> str:
     """Format available provider presets for display.
 
@@ -2096,6 +2181,7 @@ def _print_help() -> None:
     {CYAN}/cd [path]{RESET}       Change working directory (default: home)
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
+    {CYAN}/config{RESET}         View/set generation parameters (temperature, max_tokens, top_p)
     {CYAN}/history{RESET}       Show conversation history summary (--tokens for token estimates)
     {CYAN}/cost{RESET}          Estimate API cost from token usage
     {CYAN}/status{RESET}         Show session info
