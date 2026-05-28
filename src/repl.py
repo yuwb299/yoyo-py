@@ -2391,7 +2391,7 @@ def _print_help() -> None:
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
-    {CYAN}/export [path]{RESET}  Export conversation as markdown (default: conversation.md)
+    {CYAN}/export [path]{RESET}  Export conversation as markdown (--system to include system prompt)
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
