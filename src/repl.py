@@ -190,6 +190,14 @@ async def run_repl(
                 agent.clear()
                 print(f"{DIM}  (conversation cleared){RESET}\n")
                 continue
+            elif cmd == "/redo":
+                last_msg = _find_last_user_message(agent.state.messages)
+                if last_msg is None:
+                    print(f"{DIM}  No previous message to redo{RESET}\n")
+                    continue
+                print(f"{DIM}  Redoing: {last_msg[:100]}{'...' if len(last_msg) > 100 else ''}{RESET}")
+                await _run_agent_turn(agent, last_msg)
+                continue
             elif cmd == "/help":
                 _print_help()
                 continue
@@ -2155,11 +2163,39 @@ def _format_providers_list(active_model: str | None = None) -> str:
     return "\n".join(lines)
 
 
+def _find_last_user_message(messages: list[dict]) -> str | None:
+    """Find the last real user message (not a compact summary) in the conversation.
+
+    Used by /redo to re-send the last prompt. Skips compact summary messages
+    (identified by starting with '[Summary of previous conversation]') because
+    those are synthetic and not something the user typed.
+
+    Args:
+        messages: The conversation message list.
+
+    Returns:
+        The content of the last user message, or None if no real user message exists.
+    """
+    # Walk backwards through messages to find the last real user message
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content", "")
+        if not content:
+            continue
+        # Skip compact summary messages — they're synthetic, not user input
+        if content.startswith("[Summary of previous conversation]"):
+            continue
+        return content
+    return None
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
     {CYAN}/quit, /exit{RESET}    Exit the agent
     {CYAN}/clear{RESET}          Clear conversation history
+    {CYAN}/redo{RESET}           Re-send the last user prompt
     {CYAN}/help{RESET}           Show this help
     {CYAN}/model <name>{RESET}   Switch model (clears history)
     {CYAN}/diff{RESET}           Show git diff summary
