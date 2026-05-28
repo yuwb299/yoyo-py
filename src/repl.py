@@ -252,6 +252,10 @@ async def run_repl(
                 print(f"{DIM}  tokens: {agent.state.usage}{RESET}")
                 print(f"{DIM}  skills: {skills.count()}{RESET}\n")
                 continue
+            elif cmd == "/list-providers":
+                print(_format_providers_list(active_model=provider.model))
+                print()
+                continue
             elif cmd == "/env":
                 print(_show_env_info(
                     model=provider.model,
@@ -2050,6 +2054,29 @@ def _run_pr_description(workdir: str | None = None) -> str:
     return "\n".join(parts)
 
 
+def _format_providers_list(active_model: str | None = None) -> str:
+    """Format available provider presets for display.
+
+    Args:
+        active_model: Currently active model name, shown as highlight if matching.
+
+    Returns a formatted string listing all presets.
+    """
+    from .provider import PROVIDER_PRESETS
+
+    lines = [f"{BOLD}Available Provider Presets{RESET}"]
+    for name, config in sorted(PROVIDER_PRESETS.items()):
+        marker = ""
+        if active_model and config["default_model"] == active_model:
+            marker = f" {GREEN}(active){RESET}"
+        lines.append(
+            f"  {CYAN}{name:12}{RESET} env: {config['env_key']:20} model: {config['default_model']}{marker}"
+        )
+    lines.append("")
+    lines.append(f"  {DIM}Switch with: /model <model-name>{RESET}")
+    return "\n".join(lines)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -2079,6 +2106,7 @@ def _print_help() -> None:
     {CYAN}/history{RESET}       Show conversation history summary (--tokens for token estimates)
     {CYAN}/cost{RESET}          Estimate API cost from token usage
     {CYAN}/status{RESET}         Show session info
+    {CYAN}/list-providers{RESET}  List available provider presets
     {CYAN}/env{RESET}            Show provider config (model, base URL, API key hint)
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
