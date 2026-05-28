@@ -270,11 +270,17 @@ async def run_repl(
                 print()
                 continue
             elif cmd == "/status":
-                print(f"{DIM}  model: {provider.model}{RESET}")
-                print(f"{DIM}  cwd:   {os.getcwd()}{RESET}")
-                print(f"{DIM}  messages: {len(agent.state.messages)}{RESET}")
-                print(f"{DIM}  tokens: {agent.state.usage}{RESET}")
-                print(f"{DIM}  skills: {skills.count()}{RESET}\n")
+                from .agent import Agent as _Agent
+                context_tokens = _Agent._estimate_tokens(agent.state.messages)
+                print(_format_status_output(
+                    model=provider.model,
+                    cwd=os.getcwd(),
+                    messages=agent.state.messages,
+                    usage=agent.state.usage,
+                    skills_count=skills.count(),
+                    context_tokens=context_tokens,
+                ))
+                print()
                 continue
             elif cmd == "/list-providers":
                 print(_format_providers_list(active_model=provider.model))
@@ -2138,6 +2144,45 @@ def _handle_config_command(
 
     updates[key] = value
     return f"{GREEN}[OK] {key} set to {value}{RESET}", updates
+
+
+def _format_status_output(
+    model: str,
+    cwd: str,
+    messages: list[dict],
+    usage: Any,
+    skills_count: int,
+    context_tokens: int = 0,
+) -> str:
+    """Format session status information.
+
+    Shows model, working directory, message count, token usage, estimated
+    context size, and loaded skills count. Context tokens help users
+    understand how close they are to the model's context window limit.
+
+    Args:
+        model: Current model name.
+        cwd: Current working directory.
+        messages: Conversation messages list.
+        usage: Token usage data.
+        skills_count: Number of loaded skills.
+        context_tokens: Estimated context token count.
+
+    Returns a formatted string.
+    """
+    msg_count = len(messages)
+    msg_label = "message" if msg_count == 1 else "messages"
+
+    lines = [
+        f"{BOLD}Session Status{RESET}",
+        f"  model:    {model}",
+        f"  cwd:      {cwd}",
+        f"  messages: {msg_count} {msg_label}",
+        f"  tokens:   {usage} (API)",
+        f"  context:  ~{context_tokens:,} tokens (estimated)",
+        f"  skills:   {skills_count}",
+    ]
+    return "\n".join(lines)
 
 
 def _format_providers_list(active_model: str | None = None) -> str:
