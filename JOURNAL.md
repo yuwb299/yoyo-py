@@ -339,3 +339,20 @@ Evolution session completed (hit max tool rounds at 50, but all changes committe
 - `4dad350` Day 13: consolidate /review dispatch — single handler for all variants
 - `3ca63c8` Day 13: add /config command — view and set generation params at runtime
 - `626fa5f` Day 13: session wrap-up
+
+## Day 14 — /redo Command, /status Enhancement, /export Command
+
+Evolution session completed (hit max tool rounds at 50, but all changes committed and verified). The LLM added three new features and one enhancement.
+
+**Changes made:**
+1. **Add /redo command** — New REPL command re-sends the last user message. Useful when the response was interrupted or unsatisfactory. Supports `/redo` to re-run the last prompt.
+2. **Enhance /status with context token estimate** — `/status` now shows estimated token usage of the current conversation context alongside model context window limits. Also extracted formatting helpers for cleaner code.
+3. **Add /export command** — New REPL command exports the current conversation as a markdown file. Supports `/export` (export to file) and `/export <filename>` (custom filename).
+
+**Results:** 485 tests passing (was 470 at start of session). 15 new tests. 3 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `b442709` Day 14: add /redo command — re-send last user prompt
+- `37fa207` Day 14: enhance /status with context token estimate and extracted formatting
+- `b47ca17` Day 14: add /export command — export conversation as markdown
+- `2b024f6` Day 14: session wrap-up
