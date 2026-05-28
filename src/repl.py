@@ -385,6 +385,22 @@ async def run_repl(
                 print(_save_session(save_path, agent.state.messages, provider.model, usage=agent.state.usage))
                 print()
                 continue
+            elif cmd.startswith("/export"):
+                # Export conversation as markdown
+                export_path = line[7:].strip() if len(line) > 7 else ""
+                include_system = "--system" in export_path
+                # Remove --system flag from path
+                export_path = export_path.replace("--system", "").strip()
+                if not export_path:
+                    export_path = os.path.join(os.getcwd(), "conversation.md")
+                print(_export_to_file(
+                    export_path,
+                    agent.state.messages,
+                    provider.model,
+                    include_system=include_system,
+                ))
+                print()
+                continue
             elif cmd.startswith("/load"):
                 # Load session from a file
                 load_path = line[5:].strip() if len(line) > 5 else ""
@@ -2146,6 +2162,125 @@ def _handle_config_command(
     return f"{GREEN}[OK] {key} set to {value}{RESET}", updates
 
 
+def _export_to_file(
+    filepath: str,
+    messages: list[dict],
+    model: str,
+    include_system: bool = False,
+) -> str:
+    """Export conversation as markdown to a file.
+
+    Args:
+        filepath: Path to write the markdown file.
+        messages: Conversation messages.
+        model: Current model name.
+        include_system: Whether to include system prompt.
+
+    Returns a confirmation or error message.
+    """
+    try:
+        p = Path(filepath)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        content = _export_conversation_markdown(
+            messages, model=model, include_system=include_system,
+        )
+        p.write_text(content, encoding="utf-8")
+        return f"{GREEN}[OK] Conversation exported to {filepath}{RESET}"
+    except Exception as e:
+        return f"{RED}[ERROR] Failed to export: {e}{RESET}"
+
+
+def _export_conversation_markdown(
+    messages: list[dict],
+    model: str = "unknown",
+    include_system: bool = False,
+) -> str:
+    """Export conversation as markdown.
+
+    Generates a human-readable markdown document from the conversation history.
+    System prompts are excluded by default (they're internal, not user content).
+    Tool outputs are truncated to 500 chars to keep the export readable.
+
+    Args:
+        messages: The conversation messages list.
+        model: Current model name for the header.
+        include_system: Whether to include the system prompt.
+
+    Returns a markdown string.
+    """
+    from datetime import datetime
+
+    lines = [
+        f"# Conversation Export",
+        f"",
+        f"**Model:** {model}",
+        f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        f"**Messages:** {len(messages)}",
+        f"",
+        "---",
+        "",
+    ]
+
+    # Max chars for tool output in export — keeps the file readable
+    MAX_TOOL_OUTPUT = 500
+
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content") or ""
+        tool_calls = msg.get("tool_calls")
+
+        # Skip system messages unless explicitly requested
+        if role == "system" and not include_system:
+            continue
+
+        if role == "system":
+            lines.append(f"## System Prompt\n\n{content}\n")
+        elif role == "user":
+            # Skip compact summaries — they're synthetic
+            if content.startswith("[Summary of previous conversation]"):
+                lines.append(f"## Context Summary\n\n*(compacted conversation summary)*\n")
+                continue
+            lines.append(f"## User\n\n{content}\n")
+        elif role == "assistant":
+            if tool_calls:
+                tool_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
+                args = []
+                for tc in tool_calls:
+                    func = tc.get("function", {})
+                    name = func.get("name", "?")
+                    arg_str = func.get("arguments", "{}")
+                    # Try to pretty-print JSON args
+                    try:
+                        import json as _json
+                        parsed = _json.loads(arg_str)
+                        # Truncate long values
+                        short = {}
+                        for k, v in parsed.items():
+                            s = str(v)
+                            short[k] = s[:100] + "..." if len(s) > 100 else s
+                        args.append(f"{name}({_json.dumps(short)})")
+                    except (json.JSONDecodeError, Exception):
+                        args.append(f"{name}(...)")
+                lines.append(f"## Assistant → {', '.join(tool_names)}\n")
+                for arg in args:
+                    lines.append(f"- `{arg}`")
+                if content:
+                    lines.append(f"\n{content}")
+                lines.append("")
+            else:
+                lines.append(f"## Assistant\n\n{content}\n")
+        elif role == "tool":
+            # Truncate long tool output
+            display = content
+            if len(display) > MAX_TOOL_OUTPUT:
+                display = display[:MAX_TOOL_OUTPUT] + f"\n... [truncated, {len(content)} chars total]"
+            lines.append(f"### Tool Output\n\n```\n{display}\n```\n")
+        else:
+            lines.append(f"## {role.title()}\n\n{content}\n")
+
+    return "\n".join(lines)
+
+
 def _format_status_output(
     model: str,
     cwd: str,
@@ -2256,6 +2391,7 @@ def _print_help() -> None:
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
+    {CYAN}/export [path]{RESET}  Export conversation as markdown (default: conversation.md)
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
