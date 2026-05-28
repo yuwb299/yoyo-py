@@ -1771,7 +1771,7 @@ def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
     return header + "\n" + "\n".join(lines)
 
 
-# ── /cost command ──────────────────────────────────────────────────────
+# ── /cost command + context budget ──────────────────────────────────────
 
 # Pricing per million tokens (approximate, as of 2025-2026).
 # These are estimates and may not reflect current pricing.
@@ -1845,6 +1845,78 @@ def _estimate_cost(usage: Usage, model: str) -> str:
         f"  Output: {usage.output_tokens:>10,} tokens  (${output_cost:.4f})\n"
         f"  {BOLD}Total:  ${(total_cost):.4f}{RESET}"
     )
+
+
+# ── Context window budget ──────────────────────────────────────────────
+
+# Context window sizes in tokens for known models.
+# Used to show budget warnings when approaching limits.
+_MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    # GLM models (Zhipu AI)
+    "glm-5": 128000,
+    "glm-5.1": 128000,
+    "glm-4-plus": 128000,
+    "glm-4": 128000,
+    "glm-4-flash": 128000,
+    # OpenAI models
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "gpt-4-turbo": 128000,
+    "o1": 200000,
+    "o1-mini": 128000,
+    # DeepSeek models
+    "deepseek-chat": 64000,
+    "deepseek-reasoner": 64000,
+    # Moonshot models
+    "moonshot-v1-8k": 8192,
+    "moonshot-v1-32k": 32768,
+    "moonshot-v1-128k": 131072,
+}
+
+_DEFAULT_CONTEXT_WINDOW = 128000
+
+
+def _get_model_context_window(model: str) -> int:
+    """Get the context window size for a model.
+
+    Handles version suffixes by trying prefix matching.
+    E.g. 'gpt-4o-2024-05-13' matches 'gpt-4o'.
+
+    Returns the context window in tokens, or a default if unknown.
+    """
+    if model in _MODEL_CONTEXT_WINDOWS:
+        return _MODEL_CONTEXT_WINDOWS[model]
+
+    # Try prefix matching: longer prefixes first for specificity
+    for prefix in sorted(_MODEL_CONTEXT_WINDOWS.keys(), key=len, reverse=True):
+        if model.startswith(prefix):
+            return _MODEL_CONTEXT_WINDOWS[prefix]
+
+    return _DEFAULT_CONTEXT_WINDOW
+
+
+def _format_context_budget(used_tokens: int, context_window: int) -> str:
+    """Format a context budget display showing usage percentage.
+
+    Shows a warning when usage exceeds 80% of the context window.
+    This helps users know when to /compact or start a new session.
+
+    Args:
+        used_tokens: Estimated tokens in the current context.
+        context_window: Model's total context window size.
+
+    Returns a formatted string like "50,000 / 128,000 (39%)".
+    """
+    pct = int(used_tokens / context_window * 100) if context_window > 0 else 0
+    used_str = f"{used_tokens:,}"
+    window_str = f"{context_window:,}"
+
+    if pct >= 80:
+        return f"{RED}{used_str} / {window_str} ({pct}%) ⚠ high{RESET}"
+    elif pct >= 60:
+        return f"{YELLOW}{used_str} / {window_str} ({pct}%){RESET}"
+    else:
+        return f"{used_str} / {window_str} ({pct}%)"
 
 
 # ── /env command ──────────────────────────────────────────────────────
@@ -2308,13 +2380,17 @@ def _format_status_output(
     msg_count = len(messages)
     msg_label = "message" if msg_count == 1 else "messages"
 
+    # Show context budget with model's window limit
+    context_window = _get_model_context_window(model)
+    budget_str = _format_context_budget(context_tokens, context_window)
+
     lines = [
         f"{BOLD}Session Status{RESET}",
         f"  model:    {model}",
         f"  cwd:      {cwd}",
         f"  messages: {msg_count} {msg_label}",
         f"  tokens:   {usage} (API)",
-        f"  context:  ~{context_tokens:,} tokens (estimated)",
+        f"  context:  {budget_str}",
         f"  skills:   {skills_count}",
     ]
     return "\n".join(lines)
