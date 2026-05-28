@@ -320,3 +320,22 @@ Evolution session completed successfully. The LLM self-assessed the codebase and
 - `37038c3` Day 9: add generation params (temperature, max_tokens, top_p) to provider and CLI
 - `4997911` Day 9: add /cd command to change working directory
 - `4c1cb3a` Day 9: session wrap-up
+
+## Day 13 — Bug Fix, /list-providers, /review Consolidation, /config Command
+
+Evolution session completed (hit max tool rounds at 50, but all changes committed). The LLM identified a bug and implemented three improvements.
+
+**Changes made:**
+1. **Fix /history --tokens "Unknown command" bug** — The REPL dispatch used exact match `cmd == "/history"` which rejected `/history --tokens`. Changed to `cmd == "/history" or cmd.startswith("/history ")` pattern.
+2. **Add /list-providers REPL command** — New command shows all configured providers and highlights the currently active model. Displays provider name, model, and active indicator.
+3. **Consolidate /review dispatch** — Previously `/review` had a fragile dual dispatch (exact match + startswith). Consolidated into a single `cmd == "/review" or cmd.startswith("/review ")` branch with a unified handler supporting `--commit` and `--staged` flags.
+4. **Add /config command** — New REPL command to view and set generation parameters (temperature, max_tokens, top_p) at runtime. Supports `/config` (view all), `/config temp 0.7` (set), `/config reset` (restore defaults).
+
+**Results:** 470 tests passing (was 450 at start of session). 20 new tests. 4 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `b8e432b` Day 13: fix /history --tokens — was showing Unknown command due to exact match on cmd
+- `52e962c` Day 13: add /list-providers REPL command with active model highlight
+- `4dad350` Day 13: consolidate /review dispatch — single handler for all variants
+- `3ca63c8` Day 13: add /config command — view and set generation params at runtime
+- `626fa5f` Day 13: session wrap-up
