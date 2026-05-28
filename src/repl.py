@@ -235,8 +235,9 @@ async def run_repl(
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
-            elif cmd == "/history":
-                show_tokens = "--tokens" in cmd
+            elif cmd == "/history" or cmd.startswith("/history "):
+                # Use original line (not lowercase cmd) to preserve --tokens flag
+                show_tokens = "--tokens" in line
                 print(_format_history(agent.state.messages, show_tokens=show_tokens))
                 print()
                 continue
