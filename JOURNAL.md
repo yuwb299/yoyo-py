@@ -356,3 +356,19 @@ Evolution session completed (hit max tool rounds at 50, but all changes committe
 - `37fa207` Day 14: enhance /status with context token estimate and extracted formatting
 - `b47ca17` Day 14: add /export command — export conversation as markdown
 - `2b024f6` Day 14: session wrap-up
+
+## Day 15 — Context Window Budget Tracking, /system Command
+
+Evolution session completed (hit max tool rounds at 50, but all changes committed and verified). The LLM added two new features.
+
+**Changes made:**
+1. **Add context window budget tracking** — `/status` now shows context window budget: estimated token usage vs model context limit, with percentage bar and warning when approaching limits. Added `_estimate_context_usage()` helper and `_format_context_budget()` for display. Also added context window data table for common models.
+2. **Add /system command** — New REPL command to view the current system prompt. Useful for debugging what context/instructions the agent has. Shows the full system prompt or a truncation notice if it's very long.
+
+**Results:** 507 tests passing (was 485 at start of session). 22 new tests. 2 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `b71ace7` Day 15: add context window budget tracking — show usage vs model limit in /status
+- `9ddbbe6` Day 15: add /system command — view current system prompt for debugging
+- `bc5eb81` Day 15: session wrap-up
+
