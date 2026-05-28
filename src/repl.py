@@ -243,6 +243,11 @@ async def run_repl(
             elif cmd == "/tokens":
                 print(f"{DIM}  {agent.state.usage}{RESET}\n")
                 continue
+            elif cmd == "/system":
+                # View the current system prompt — useful for debugging context
+                print(_format_system_prompt_display(agent.state.messages))
+                print()
+                continue
             elif cmd == "/config" or cmd.startswith("/config "):
                 # View or set generation parameters at runtime
                 config_args = line[7:].strip() if len(line) > 7 else ""
@@ -2446,6 +2451,52 @@ def _find_last_user_message(messages: list[dict]) -> str | None:
     return None
 
 
+# Max chars to show in /system display — prevents flooding the terminal
+_SYSTEM_DISPLAY_LIMIT = 3000
+
+
+def _format_system_prompt_display(messages: list[dict]) -> str:
+    """Format the current system prompt for display.
+
+    Shows the full system prompt with line count. Truncates very long
+    prompts to avoid flooding the terminal. Returns a message if no
+    system prompt is set.
+
+    Args:
+        messages: The conversation message list.
+
+    Returns a formatted string showing the system prompt.
+    """
+    # Find the system message
+    system_content = None
+    for msg in messages:
+        if msg.get("role") == "system":
+            system_content = msg.get("content", "")
+            break
+
+    if system_content is None:
+        return f"{DIM}No system prompt set{RESET}"
+
+    line_count = system_content.count("\n") + 1
+    char_count = len(system_content)
+
+    lines = [
+        f"{BOLD}System Prompt{RESET} ({line_count} lines, {char_count:,} chars)",
+        "",
+    ]
+
+    if char_count > _SYSTEM_DISPLAY_LIMIT:
+        truncated = system_content[:_SYSTEM_DISPLAY_LIMIT]
+        lines.append(truncated)
+        lines.append("")
+        remaining = char_count - _SYSTEM_DISPLAY_LIMIT
+        lines.append(f"{DIM}... ({remaining:,} more chars truncated){RESET}")
+    else:
+        lines.append(system_content)
+
+    return "\n".join(lines)
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Commands:{RESET}
@@ -2474,6 +2525,7 @@ def _print_help() -> None:
     {CYAN}/cd [path]{RESET}       Change working directory (default: home)
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/tokens{RESET}         Show token usage
+    {CYAN}/system{RESET}        View current system prompt
     {CYAN}/config{RESET}         View/set generation parameters (temperature, max_tokens, top_p)
     {CYAN}/history{RESET}       Show conversation history summary (--tokens for token estimates)
     {CYAN}/cost{RESET}          Estimate API cost from token usage
