@@ -298,34 +298,27 @@ async def run_repl(
                 print(_run_fix_command())
                 print()
                 continue
-            elif cmd == "/review":
-                # Review working tree changes
-                review_result = _run_review()
+            elif cmd == "/review" or cmd.startswith("/review "):
+                # Consolidated /review handler — parses flags from original input
+                args_str = line[7:].strip() if len(line) > 7 else ""
+                if "--commit" in args_str:
+                    review_result = _run_review(commit=True)
+                elif "--staged" in args_str:
+                    review_result = _run_review(staged=True)
+                elif args_str:
+                    # Unknown flag
+                    print(f"{YELLOW}Usage: /review [--commit | --staged]{RESET}")
+                    print()
+                    continue
+                else:
+                    # Bare /review — review working tree changes
+                    review_result = _run_review()
                 if review_result.startswith("["):
                     # Error/status message — just display it
                     print(review_result)
                 else:
                     # Actual review prompt — send to agent
                     await _run_agent_turn(agent, review_result)
-                print()
-                continue
-            elif cmd.startswith("/review"):
-                # /review with options: --commit, --staged
-                args_str = line[7:].strip()
-                if "--commit" in args_str:
-                    review_result = _run_review(commit=True)
-                    if review_result.startswith("["):
-                        print(review_result)
-                    else:
-                        await _run_agent_turn(agent, review_result)
-                elif "--staged" in args_str:
-                    review_result = _run_review(staged=True)
-                    if review_result.startswith("["):
-                        print(review_result)
-                    else:
-                        await _run_agent_turn(agent, review_result)
-                else:
-                    print(f"{YELLOW}Usage: /review [--commit | --staged]{RESET}")
                 print()
                 continue
             elif cmd == "/pr":
