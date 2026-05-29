@@ -2505,42 +2505,52 @@ def _format_system_prompt_display(messages: list[dict]) -> str:
 
 def _print_help() -> None:
     print(f"""
-{BOLD}  Commands:{RESET}
+{BOLD}  Session:{RESET}
     {CYAN}/quit, /exit{RESET}    Exit the agent
+    {CYAN}/help{RESET}           Show this help
     {CYAN}/clear{RESET}          Clear conversation history
     {CYAN}/redo{RESET}           Re-send the last user prompt
-    {CYAN}/help{RESET}           Show this help
+    {CYAN}/compact{RESET}        Compact conversation history
+    {CYAN}/cd [path]{RESET}      Change working directory (default: home)
     {CYAN}/model <name>{RESET}   Switch model (clears history)
+
+  {BOLD}Git:{RESET}
     {CYAN}/diff{RESET}           Show git diff summary
     {CYAN}/log [N]{RESET}        Show recent git commits (default 10)
-    {CYAN}/health{RESET}         Run build/test/lint diagnostics
-    {CYAN}/test{RESET}          Run project tests
-    {CYAN}/fix{RESET}           Auto-fix lint/format errors
-    {CYAN}/review{RESET}            AI code review of current changes
-    {CYAN}/review --commit{RESET}   Review the last commit
-    {CYAN}/review --staged{RESET}   Review staged changes
-    {CYAN}/pr{RESET}             Generate PR description from current changes
-    {CYAN}/init{RESET}          Generate YOYO.md context file (--force to overwrite)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
+    {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
+    {CYAN}/review{RESET}             AI code review of current changes
+    {CYAN}/review --commit{RESET}    Review the last commit
+    {CYAN}/review --staged{RESET}    Review staged changes
+    {CYAN}/pr{RESET}             Generate PR description from current changes
+
+  {BOLD}Project:{RESET}
+    {CYAN}/tree{RESET}           Show project directory structure
+    {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
+    {CYAN}/health{RESET}         Run build/test/lint diagnostics
+    {CYAN}/test{RESET}           Run project tests
+    {CYAN}/fix{RESET}            Auto-fix lint/format errors
+
+  {BOLD}Session Info:{RESET}
+    {CYAN}/status{RESET}         Show session info (model, tokens, context)
+    {CYAN}/tokens{RESET}         Show token usage
+    {CYAN}/cost{RESET}           Estimate API cost from token usage
+    {CYAN}/history{RESET}        Show conversation history (--tokens for estimates)
+    {CYAN}/system{RESET}         View current system prompt
+    {CYAN}/env{RESET}            Show provider config (model, base URL, API key)
+
+  {BOLD}Config:{RESET}
+    {CYAN}/config{RESET}         View/set generation parameters (temperature, max_tokens, top_p)
+    {CYAN}/list-providers{RESET}  List available provider presets
+
+  {BOLD}Persistence:{RESET}
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
     {CYAN}/export [path]{RESET}  Export conversation as markdown (--system to include system prompt)
-    {CYAN}/skills{RESET}         List loaded skills
-    {CYAN}/compact{RESET}        Compact conversation history
-    {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
-    {CYAN}/cd [path]{RESET}       Change working directory (default: home)
-    {CYAN}/tree{RESET}           Show project directory structure
-    {CYAN}/tokens{RESET}         Show token usage
-    {CYAN}/system{RESET}        View current system prompt
-    {CYAN}/config{RESET}         View/set generation parameters (temperature, max_tokens, top_p)
-    {CYAN}/history{RESET}       Show conversation history summary (--tokens for token estimates)
-    {CYAN}/cost{RESET}          Estimate API cost from token usage
-    {CYAN}/status{RESET}         Show session info
-    {CYAN}/list-providers{RESET}  List available provider presets
-    {CYAN}/env{RESET}            Show provider config (model, base URL, API key hint)
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
     {CYAN}/forget <id>{RESET}    Forget a remembered fact by ID
+    {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/commands{RESET}       List custom slash commands from .yoyo/commands/
 
 {BOLD}  Tools:{RESET}
