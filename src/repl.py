@@ -311,17 +311,26 @@ async def run_repl(
                 print()
                 continue
             elif cmd.startswith("/log"):
-                # /log or /log N (show N recent commits)
-                count_str = line[4:].strip() if len(line) > 4 else ""
+                # /log, /log N, /log --oneline, /log N --oneline
+                log_args = line[4:].strip() if len(line) > 4 else ""
                 count = 10
-                if count_str:
-                    try:
-                        count = int(count_str)
-                        count = max(1, min(count, 100))  # Clamp to reasonable range
-                    except ValueError:
-                        print(f"{YELLOW}Usage: /log [N] — N is number of commits{RESET}\n")
-                        continue
-                print(_run_git_log(count=count))
+                oneline = False
+                if log_args:
+                    parts = log_args.split()
+                    for part in parts:
+                        if part == "--oneline":
+                            oneline = True
+                        else:
+                            try:
+                                count = max(1, min(int(part), 100))
+                            except ValueError:
+                                print(f"{YELLOW}Usage: /log [N] [--oneline]{RESET}\n")
+                                break
+                    else:
+                        print(_run_git_log(count=count, oneline=oneline))
+                    print()
+                    continue
+                print(_run_git_log(count=count, oneline=oneline))
                 print()
                 continue
             elif cmd == "/health":
@@ -1740,12 +1749,13 @@ def _format_history(messages: list[dict], show_tokens: bool = False) -> str:
     return "\n".join(lines)
 
 
-def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
+def _run_git_log(workdir: str | None = None, count: int = 10, oneline: bool = False) -> str:
     """Show recent git commit log.
 
     Args:
         workdir: Working directory (defaults to cwd).
         count: Number of commits to show (default 10).
+        oneline: If True, show compact one-line-per-commit format.
 
     Returns a formatted commit log or error message.
     """
@@ -1756,10 +1766,14 @@ def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
     if check.returncode != 0:
         return "[Not a git repo]"
 
-    # Format: short hash | subject | author name | relative date
-    # Using | as separator for reliable parsing
-    log_format = "%h|%s|%an|%cr"
-    log_result = _run_git("log", f"-{count}", f"--format={log_format}", workdir=cwd)
+    if oneline:
+        # Compact format: short hash + subject only
+        log_format = "%h %s"
+        log_result = _run_git("log", f"-{count}", f"--format={log_format}", workdir=cwd)
+    else:
+        # Default format: short hash | subject | author name | relative date
+        log_format = "%h|%s|%an|%cr"
+        log_result = _run_git("log", f"-{count}", f"--format={log_format}", workdir=cwd)
 
     if log_result.returncode != 0:
         return f"[ERROR] git log failed: {log_result.stderr[:200]}"
@@ -1770,13 +1784,17 @@ def _run_git_log(workdir: str | None = None, count: int = 10) -> str:
 
     # Parse and format nicely
     lines = []
-    for entry in output.splitlines():
-        parts = entry.split("|", 3)
-        if len(parts) == 4:
-            short_hash, subject, author, date = parts
-            lines.append(f"  {YELLOW}{short_hash}{RESET} {subject} {DIM}({author}, {date}){RESET}")
-        else:
-            lines.append(f"  {entry}")
+    if oneline:
+        for entry in output.splitlines():
+            lines.append(f"  {YELLOW}{entry}{RESET}")
+    else:
+        for entry in output.splitlines():
+            parts = entry.split("|", 3)
+            if len(parts) == 4:
+                short_hash, subject, author, date = parts
+                lines.append(f"  {YELLOW}{short_hash}{RESET} {subject} {DIM}({author}, {date}){RESET}")
+            else:
+                lines.append(f"  {entry}")
 
     header = f"{BOLD}Recent Commits{RESET} (last {count})"
     return header + "\n" + "\n".join(lines)
@@ -2516,7 +2534,7 @@ def _print_help() -> None:
 
   {BOLD}Git:{RESET}
     {CYAN}/diff{RESET}           Show git diff summary
-    {CYAN}/log [N]{RESET}        Show recent git commits (default 10)
+    {CYAN}/log [N] [--oneline]{RESET}  Show recent git commits (default 10)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
     {CYAN}/review{RESET}             AI code review of current changes
