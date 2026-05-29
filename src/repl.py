@@ -41,6 +41,8 @@ def print_usage(usage) -> None:
 
 def load_system_prompt(skills: SkillSet | None = None) -> str:
     """Build the system prompt from base + skills + project context."""
+    from datetime import datetime
+
     parts = [
         "You are a coding assistant working in the user's terminal.",
         "You have access to the filesystem and shell. Be direct and concise.",
@@ -48,6 +50,7 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
         "Use tools proactively: read files to understand context, run commands to verify your work.",
         "After making changes, run tests or verify the result when appropriate.",
         "You respond in the same language the user uses.",
+        f"Current date: {datetime.now().strftime('%Y-%m-%d')}",
         f"Current working directory: {os.getcwd()}",
     ]
 

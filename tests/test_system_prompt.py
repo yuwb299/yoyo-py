@@ -23,6 +23,14 @@ class TestSystemPromptBaseContent:
         assert "Current working directory:" in prompt
         assert os.getcwd() in prompt
 
+    def test_includes_current_date(self):
+        """System prompt should include the current date so the agent knows today."""
+        from datetime import datetime
+        prompt = load_system_prompt()
+        today = datetime.now().strftime('%Y-%m-%d')
+        assert "Current date:" in prompt
+        assert today in prompt
+
     def test_includes_tool_usage_instruction(self):
         prompt = load_system_prompt()
         assert "Use tools proactively" in prompt
