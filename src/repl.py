@@ -558,6 +558,9 @@ def _tool_summary(name: str, args: dict) -> str:
     elif name == "list_files":
         path = args.get("path", ".")
         return f"ls {path}"
+    elif name == "glob":
+        pat = args.get("pattern", "*")
+        return f"glob '{_truncate_str(pat, 60)}'"
     return name
 
 
@@ -2538,5 +2541,5 @@ def _print_help() -> None:
     {CYAN}/commands{RESET}       List custom slash commands from .yoyo/commands/
 
 {BOLD}  Tools:{RESET}
-    bash, read_file, write_file, edit_file, search, list_files
+    bash, read_file, write_file, edit_file, search, list_files, glob
 """)

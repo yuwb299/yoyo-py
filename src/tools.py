@@ -4,7 +4,7 @@ Each tool is:
 1. A Python function that does the work
 2. An OpenAI-format function schema for the LLM to understand
 
-Tools: bash, read_file, write_file, edit_file, search, list_files
+Tools: bash, read_file, write_file, edit_file, search, list_files, glob
 """
 
 from __future__ import annotations
@@ -302,6 +302,66 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
         return f"[ERROR] {e}"
 
 
+def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes: bool = False) -> str:
+    """Find files by name pattern using glob syntax.
+
+    Supports ** for recursive matching. Much faster than list_files for
+    finding files by name because it uses pathlib.glob directly instead
+    of listing everything then filtering.
+
+    Args:
+        pattern: Glob pattern (e.g. '**/*.py', '*.txt', 'src/**/test_*.py').
+        path: Root directory to search in (default: current).
+        max_results: Maximum number of results to return (default 100).
+        show_sizes: If True, show file sizes in output.
+
+    Returns:
+        List of matching file paths, sorted alphabetically.
+    """
+    try:
+        p = Path(path)
+        if not p.exists():
+            return f"[ERROR] Path not found: {path}"
+        if not p.is_dir():
+            return f"[ERROR] Not a directory: {path}"
+
+        matches = sorted(p.glob(pattern))
+        # Filter out directories — only return files
+        matches = [m for m in matches if m.is_file()]
+
+        total = len(matches)
+        if total == 0:
+            return "[No files found matching pattern]"
+
+        truncated = total > max_results
+        if truncated:
+            matches = matches[:max_results]
+
+        lines = [f"[{total} file(s) matching '{pattern}' in {path}]"]
+        for m in matches:
+            # Show relative path from the search root for readability
+            try:
+                rel = m.relative_to(p)
+            except ValueError:
+                rel = m
+            if show_sizes:
+                try:
+                    size = m.stat().st_size
+                    lines.append(f"  {rel}  ({_format_size(size)})")
+                except OSError:
+                    lines.append(f"  {rel}  (?)")
+            else:
+                lines.append(f"  {rel}")
+
+        if truncated:
+            lines.append(f"  ... and {total - max_results} more files")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        return f"[ERROR] {e}"
+
+
 # ─── Tool schemas (OpenAI function calling format) ──────────────────
 
 TOOL_SCHEMAS = [
@@ -466,6 +526,38 @@ TOOL_SCHEMAS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "glob",
+            "description": "Find files by name pattern using glob syntax. Supports ** for recursive matching. Use for finding files by name or extension — much faster than list_files for file discovery.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern (e.g. '**/*.py', '*.txt', 'src/**/test_*.py').",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "Root directory to search in (default: current).",
+                        "default": ".",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of results to return (default 100).",
+                        "default": 100,
+                    },
+                    "show_sizes": {
+                        "type": "boolean",
+                        "description": "If True, show file sizes in output.",
+                        "default": False,
+                    },
+                },
+                "required": ["pattern"],
+            },
+        },
+    },
 ]
 
 # Tool name → function mapping
@@ -476,6 +568,7 @@ TOOL_FUNCTIONS = {
     "edit_file": tool_edit_file,
     "search": tool_search,
     "list_files": tool_list_files,
+    "glob": tool_glob,
 }
 
 
