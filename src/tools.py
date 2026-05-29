@@ -4,7 +4,7 @@ Each tool is:
 1. A Python function that does the work
 2. An OpenAI-format function schema for the LLM to understand
 
-Tools: bash, read_file, write_file, edit_file, search, list_files, glob
+Tools: bash, read_file, write_file, edit_file, search, list_files, mkdir, glob
 """
 
 from __future__ import annotations
@@ -558,6 +558,28 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "mkdir",
+            "description": "Create a directory. Supports creating parent directories with parents=True.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Directory path to create.",
+                    },
+                    "parents": {
+                        "type": "boolean",
+                        "description": "If True, create parent directories as needed (default True).",
+                        "default": True,
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "glob",
             "description": "Find files by name pattern using glob syntax. Supports ** for recursive matching. Use for finding files by name or extension — much faster than list_files for file discovery.",
             "parameters": {
@@ -597,6 +619,7 @@ TOOL_FUNCTIONS = {
     "edit_file": tool_edit_file,
     "search": tool_search,
     "list_files": tool_list_files,
+    "mkdir": tool_mkdir,
     "glob": tool_glob,
 }
 

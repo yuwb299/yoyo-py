@@ -2554,5 +2554,5 @@ def _print_help() -> None:
     {CYAN}/commands{RESET}       List custom slash commands from .yoyo/commands/
 
 {BOLD}  Tools:{RESET}
-    bash, read_file, write_file, edit_file, search, list_files, glob
+    bash, read_file, write_file, edit_file, search, list_files, mkdir, glob
 """)
