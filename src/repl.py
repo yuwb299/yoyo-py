@@ -573,6 +573,9 @@ def _tool_summary(name: str, args: dict) -> str:
     elif name == "glob":
         pat = args.get("pattern", "*")
         return f"glob '{_truncate_str(pat, 60)}'"
+    elif name == "mkdir":
+        path = args.get("path", ".")
+        return f"mkdir {path}"
     return name
 
 
