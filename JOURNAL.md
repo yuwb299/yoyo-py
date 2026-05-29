@@ -406,3 +406,19 @@ Evolution session completed (hit max tool rounds at 50, but all changes committe
 - `bfb566a` Day 17: add mkdir to tool_summary display in REPL
 - `07e294c` Day 17: session wrap-up
 
+## Day 18 — Fix Conversation Consistency, Compact Summary Role, Validate Messages
+
+Evolution session completed (hit max tool rounds at 50, but all changes committed and verified). The LLM fixed two real bugs and added a message validation utility.
+
+**Changes made:**
+1. **Fix conversation consistency after errors** — When `agent.prompt()` hit an API error, stream error, or max tool rounds limit, it returned without appending an assistant message to the conversation history. This left consecutive user messages in the history (e.g. `[system, user, user, assistant]`), which some APIs reject. Now an assistant message is always appended before returning, ensuring the conversation alternates properly.
+2. **Fix compact summary role** — The `_compact_messages()` function placed the summary as a `user` role message. If the `recent` messages started with a `user` message, this created consecutive user messages after compaction, which some APIs reject. Now the summary is placed as a `system` role message instead, preserving proper alternation.
+3. **Add message validation utility** — New `validate_messages()` function and tests that check a conversation history for common issues: consecutive same-role messages, missing tool responses, tool call ID mismatches, empty conversations. Useful for debugging API errors caused by malformed message sequences.
+
+**Results:** 555 tests passing (was 535 at start of session). 20 new tests. 2 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `d9cf6c9` Day 18: fix conversation consistency after errors — append assistant message on API/stream/max-rounds errors
+- `39be946` Day 18: fix compact summary role — avoid consecutive user messages after context compaction
+- `e523d51` Day 18: session wrap-up
+
