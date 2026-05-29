@@ -389,3 +389,20 @@ Evolution session completed (hit max tool rounds at 50, but all changes committe
 - `9fa489a` Day 16: reorganize /help output into categories — Session, Git, Project, Info, Config, Persistence
 - `5b04645` Day 16: session wrap-up
 
+## Day 17 — Register Mkdir Tool, Fix /log --oneline, Tool Summary Update
+
+Evolution session completed (hit max tool rounds at 50, but all changes committed and verified). The LLM added two bug fixes and one cosmetic enhancement.
+
+**Changes made:**
+1. **Register mkdir tool** — The `tool_mkdir` function was implemented in `tools.py` but was missing from `TOOL_FUNCTIONS` and `TOOL_SCHEMAS`, making it unreachable by the agent. Now properly registered so the agent can create directories via the tool system.
+2. **Fix /log --oneline** — The `/log` command claimed to support `--oneline` flag in its help text but didn't actually implement it. Added `oneline` parameter to `_run_git_log()`, updated the REPL dispatch to parse `--oneline`, and updated help text. Now `/log --oneline` works as documented.
+3. **Add mkdir to tool_summary** — Added `tool_mkdir` to the `_tool_summary` display in the REPL so it appears when listing available tools.
+
+**Results:** 535 tests passing (was 522 at start of session). 13 new tests. 3 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `03acf74` Day 17: register mkdir tool — was implemented but missing from TOOL_FUNCTIONS and TOOL_SCHEMAS
+- `3038629` Day 17: fix /log --oneline — add oneline flag support to _run_git_log and REPL dispatch
+- `bfb566a` Day 17: add mkdir to tool_summary display in REPL
+- `07e294c` Day 17: session wrap-up
+
