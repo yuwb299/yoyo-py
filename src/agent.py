@@ -395,6 +395,77 @@ class Agent:
         return max(total_chars // 3, 1) if total_chars else 0
 
     @staticmethod
+    def _validate_messages(messages: list[dict[str, Any]]) -> list[str]:
+        """Validate conversation structure and return a list of issue descriptions.
+
+        Checks for:
+        - Consecutive messages with the same role (user or assistant)
+        - Tool messages not preceded by an assistant with tool_calls
+        - Mismatched tool_call_ids between assistant tool_calls and tool responses
+        - Assistant tool_calls without matching tool responses
+        - System prompt not at position 0
+
+        Returns an empty list if the conversation is well-formed.
+        """
+        issues: list[str] = []
+        if not messages:
+            return issues
+
+        # System prompt must be first if present
+        for i, m in enumerate(messages):
+            if m.get("role") == "system" and i > 0:
+                issues.append(f"System prompt at position {i} (must be first)")
+
+        # Check for consecutive same-role messages and tool-related issues
+        pending_tool_ids: set[str] = set()  # tool_call_ids awaiting responses
+
+        for i, m in enumerate(messages):
+            role = m.get("role", "unknown")
+            prev_role = messages[i - 1].get("role") if i > 0 else None
+
+            # Consecutive user or assistant messages
+            if role in ("user", "assistant") and role == prev_role:
+                issues.append(
+                    f"Consecutive {role} messages at positions {i - 1} and {i}"
+                )
+
+            if role == "assistant":
+                tool_calls = m.get("tool_calls", [])
+                if tool_calls:
+                    # Track tool_call_ids that need responses
+                    for tc in tool_calls:
+                        tc_id = tc.get("id", "")
+                        if tc_id:
+                            pending_tool_ids.add(tc_id)
+                elif not tool_calls and prev_role == "assistant" and messages[i - 1].get("tool_calls"):
+                    # This assistant message might be answering tool results — that's fine
+                    pass
+
+            elif role == "tool":
+                tc_id = m.get("tool_call_id", "")
+                # Tool must follow an assistant with tool_calls
+                if prev_role != "assistant" or not messages[i - 1].get("tool_calls"):
+                    issues.append(
+                        f"Tool message at position {i} without preceding assistant tool_calls"
+                    )
+                # Check tool_call_id matches
+                if tc_id:
+                    if tc_id in pending_tool_ids:
+                        pending_tool_ids.discard(tc_id)
+                    else:
+                        issues.append(
+                            f"Tool message at position {i} has unmatched tool_call_id '{tc_id}'"
+                        )
+
+        # Check for unanswered tool calls
+        if pending_tool_ids:
+            issues.append(
+                f"Unanswered tool_call_ids: {', '.join(sorted(pending_tool_ids))}"
+            )
+
+        return issues
+
+    @staticmethod
     def _should_compact(messages: list[dict[str, Any]], max_tokens: int = 100000) -> bool:
         """Return True if the message list exceeds the token budget."""
         return Agent._estimate_tokens(messages) > max_tokens
