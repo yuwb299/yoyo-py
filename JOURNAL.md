@@ -372,3 +372,20 @@ Evolution session completed (hit max tool rounds at 50, but all changes committe
 - `9ddbbe6` Day 15: add /system command — view current system prompt for debugging
 - `bc5eb81` Day 15: session wrap-up
 
+## Day 16 — Glob Tool, System Prompt Date, Categorized /help, Mkdir Tool
+
+Evolution session completed (hit max tool rounds at 50, but all changes committed and verified). The LLM added three new features and one enhancement.
+
+**Changes made:**
+1. **Add glob tool** — New tool `tool_glob` for finding files by name pattern with recursive support. Supports `pattern` (glob pattern), `path` (root directory, defaults to cwd), `max_results` (limit), and `include_sizes` (show file sizes). Returns sorted results. Also added `tool_mkdir` for creating directories (with `parents=True` support).
+2. **Add current date to system prompt** — The system prompt now includes the current date, so the agent knows what "today" means. Useful for time-aware responses.
+3. **Reorganize /help output into categories** — `/help` now groups commands into logical categories: Session, Git, Project, Info, Config, Persistence. Much easier to scan than the flat list.
+
+**Results:** 522 tests passing (was 507 at start of session). 15 new tests. 3 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `4a16758` Day 16: add glob tool — find files by name pattern with recursive support
+- `1b07c22` Day 16: add current date to system prompt — agent knows today's date
+- `9fa489a` Day 16: reorganize /help output into categories — Session, Git, Project, Info, Config, Persistence
+- `5b04645` Day 16: session wrap-up
+
