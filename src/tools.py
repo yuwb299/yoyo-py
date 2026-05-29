@@ -118,6 +118,35 @@ def tool_write_file(path: str, content: str) -> str:
         return f"[ERROR] {e}"
 
 
+def tool_mkdir(path: str, parents: bool = True) -> str:
+    """Create a directory.
+
+    Args:
+        path: Directory path to create.
+        parents: If True, create parent directories as needed (default True).
+
+    Returns:
+        Confirmation or error message.
+    """
+    try:
+        p = Path(path)
+        if p.exists():
+            if p.is_dir():
+                return f"[OK] Directory already exists: {path}"
+            return f"[ERROR] Path exists but is not a directory: {path}"
+        if parents:
+            p.mkdir(parents=True, exist_ok=True)
+        else:
+            p.mkdir()
+        return f"[OK] Created directory: {path}"
+    except FileExistsError:
+        return f"[ERROR] Directory already exists: {path}"
+    except FileNotFoundError:
+        return f"[ERROR] Parent directory does not exist. Use parents=True to create nested dirs."
+    except Exception as e:
+        return f"[ERROR] {e}"
+
+
 def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     """Surgical text replacement in a file.
 
