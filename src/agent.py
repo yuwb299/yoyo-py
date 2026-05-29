@@ -492,6 +492,13 @@ class Agent:
         summary_text = (
             "[Summary of previous conversation]:\n" + "\n".join(summary_parts)
         )
-        summary_msg = {"role": "user", "content": summary_text}
+
+        # Choose summary role to avoid consecutive same-role messages:
+        # If the first message in recent is a user message, the summary should be
+        # assistant role to prevent consecutive user messages (which some APIs reject).
+        # Otherwise, user role is fine (and more natural for summaries).
+        first_recent_role = recent[0].get("role") if recent else None
+        summary_role = "assistant" if first_recent_role == "user" else "user"
+        summary_msg = {"role": summary_role, "content": summary_text}
 
         return system_msgs + [summary_msg] + recent
