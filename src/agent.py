@@ -137,10 +137,21 @@ class Agent:
                     hint = " (network issue — check your internet connection)"
                 elif e.category == "timeout":
                     hint = " (request timed out — try a shorter prompt)"
-                yield (AgentEvent.ERROR, f"{e}{hint}")
+                error_msg = f"{e}{hint}"
+                # Append assistant message so conversation stays valid (no consecutive user msgs)
+                self.state.messages.append({
+                    "role": "assistant",
+                    "content": f"[error: {error_msg}]",
+                })
+                yield (AgentEvent.ERROR, error_msg)
                 return
             except Exception as e:
-                yield (AgentEvent.ERROR, f"Unexpected error: {e}")
+                error_msg = f"Unexpected error: {e}"
+                self.state.messages.append({
+                    "role": "assistant",
+                    "content": f"[error: {error_msg}]",
+                })
+                yield (AgentEvent.ERROR, error_msg)
                 return
 
             # Collect the full assistant message from the stream
@@ -201,7 +212,14 @@ class Agent:
                             round_usage.add(GLMProvider.parse_usage(chunk))
 
             except Exception as e:
-                yield (AgentEvent.ERROR, f"Stream error: {e}")
+                error_msg = f"Stream error: {e}"
+                # Save partial assistant content if any, so conversation stays valid
+                self.state.usage.add(round_usage)
+                self.state.messages.append({
+                    "role": "assistant",
+                    "content": assistant_content + f"\n[error: {error_msg}]" if assistant_content else f"[error: {error_msg}]",
+                })
+                yield (AgentEvent.ERROR, error_msg)
                 return
 
             # Handle interrupt: save what we have and stop
@@ -349,8 +367,13 @@ class Agent:
                         }
                     )
 
-        # Safety: exceeded max rounds
-        yield (AgentEvent.ERROR, f"Exceeded max tool rounds ({self.state.max_tool_rounds})")
+        # Safety: exceeded max rounds — append assistant message so conversation stays valid
+        max_rounds_msg = f"Exceeded max tool rounds ({self.state.max_tool_rounds})"
+        self.state.messages.append({
+            "role": "assistant",
+            "content": f"[error: {max_rounds_msg}]",
+        })
+        yield (AgentEvent.ERROR, max_rounds_msg)
 
     # ── Context auto-compaction ──────────────────────────────────────
 
