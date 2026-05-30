@@ -176,6 +176,8 @@ async def run_repl(
         try:
             line = _read_multiline_input()
         except (EOFError, KeyboardInterrupt):
+            # Auto-save on exit to prevent data loss
+            _auto_save_on_exit(agent.state.messages, provider.model, usage=agent.state.usage)
             print(f"\n{DIM}  bye 👋{RESET}\n")
             break
 
@@ -187,6 +189,8 @@ async def run_repl(
         if line.startswith("/"):
             cmd = line.lower()
             if cmd in ("/quit", "/exit"):
+                # Auto-save on exit to prevent data loss
+                _auto_save_on_exit(agent.state.messages, provider.model, usage=agent.state.usage)
                 print(f"\n{DIM}  bye 👋{RESET}\n")
                 break
             elif cmd == "/clear":
@@ -907,6 +911,75 @@ def _save_session(filepath: str, messages: list[dict], model: str, usage: Usage 
     except Exception as e:
         return f"[ERROR] Failed to save session: {e}"
 
+
+def _auto_save_session(
+    save_path: str,
+    messages: list[dict],
+    model: str,
+    usage: Usage | None = None,
+) -> str:
+    """Auto-save session on exit — prevents data loss from unexpected termination.
+
+    Only saves if there are real messages beyond just the system prompt.
+    The auto-saved file is marked with an "autosaved" flag so the user
+    can distinguish it from manual saves.
+
+    Args:
+        save_path: Path to save the auto-save file.
+        messages: The conversation messages.
+        model: Current model name.
+        usage: Token usage data.
+
+    Returns a confirmation or skip message.
+    """
+    from datetime import datetime
+    from .provider import Usage as _Usage
+
+    # Don't save empty conversations or system-only sessions
+    real_msgs = [m for m in messages if m.get("role") != "system"]
+    if not real_msgs:
+        return "[Skipped auto-save — no conversation to save]"
+
+    try:
+        p = Path(save_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+
+        data: dict[str, Any] = {
+            "version": 1,
+            "timestamp": datetime.now().isoformat(),
+            "model": model,
+            "messages": messages,
+            "autosaved": True,
+        }
+        if usage is not None:
+            data["usage"] = {
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+            }
+
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        return f"[OK] Auto-saved session ({len(real_msgs)} messages)"
+    except Exception as e:
+        return f"[ERROR] Auto-save failed: {e}"
+
+
+def _auto_save_on_exit(
+    messages: list[dict],
+    model: str,
+    usage: Usage | None = None,
+) -> None:
+    """Auto-save session on REPL exit.
+
+    Silently saves to .yoyo/autosave.json so users don't lose their
+    conversation if they forget to /save. Only saves if there are real
+    messages (not just a system prompt). Errors are silently ignored
+    since this runs during exit.
+    """
+    try:
+        save_path = os.path.join(os.getcwd(), ".yoyo", "autosave.json")
+        _auto_save_session(save_path, messages, model, usage=usage)
+    except Exception:
+        pass  # Silent on exit — don't crash during shutdown
 
 def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
     """Load a conversation session from a JSON file.
