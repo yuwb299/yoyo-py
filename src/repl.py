@@ -1633,9 +1633,10 @@ def _run_review(workdir: str | None = None, commit: bool = False, staged: bool =
         # Review the last commit
         diff_result = _run_git("diff", "HEAD~1", "HEAD", workdir=cwd)
         if diff_result.returncode != 0:
-            # Might be the first commit with no parent
-            # Try diff against empty tree
-            diff_result = _run_git("diff", "--cached", "HEAD", workdir=cwd)
+            # Might be the first commit with no parent — diff against git's empty tree
+            # The empty tree hash is a well-known constant in git
+            EMPTY_TREE = "4b825dc642cb6eb9a060e54bf899d15363d7aa72"
+            diff_result = _run_git("diff", EMPTY_TREE, "HEAD", workdir=cwd)
             if diff_result.returncode != 0:
                 return f"[ERROR] Could not get commit diff: {diff_result.stderr[:200]}"
         prompt = _review_prompt_from_diff(diff_result.stdout)
