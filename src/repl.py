@@ -2346,6 +2346,10 @@ def _export_conversation_markdown(
                 continue
             lines.append(f"## User\n\n{content}\n")
         elif role == "assistant":
+            # Skip compact summaries — they're synthetic, not real assistant output
+            if content and content.startswith("[Summary of previous conversation]"):
+                lines.append(f"## Context Summary\n\n*(compacted conversation summary)*\n")
+                continue
             if tool_calls:
                 tool_names = [tc.get("function", {}).get("name", "?") for tc in tool_calls]
                 args = []
