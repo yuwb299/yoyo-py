@@ -48,6 +48,9 @@
 - [x] `/export` — export conversation as markdown (Day 14)
 - [x] `/status` with context token estimate (Day 14)
 
+- [x] Auto-save conversation on exit (Day 20)
+- [x] Tool output preview in REPL (Day 20)
+
 ## Level 5: Evolution (Day 71+)
 - [ ] Self-assessment skill: analyze own code quality
 - [ ] Auto-evolution: read own source → plan → implement → test → commit

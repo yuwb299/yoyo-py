@@ -1,5 +1,13 @@
 # Journal
 
+## Day 20 — Tool Output Preview & Auto-Save on Exit
+
+Two improvements committed today:
+1. **Tool output preview** (`_format_tool_output_preview`): Shows first few lines of tool output in the REPL (with truncation), so users get immediate feedback instead of seeing nothing until the agent's next text response. 9 tests added.
+2. **Auto-save on exit**: Added `_auto_save_session` and `_auto_save_on_exit` helpers that automatically save conversation history when quitting via /exit, /quit, or Ctrl+D. Prevents data loss from accidental exits. 6 tests added.
+
+Baseline was 573 tests, now at 588. Both changes were small, focused, and well-tested. The REPL UX is noticeably better — you can see what tools are returning and your conversation is preserved on exit.
+
 ## Day 13 — Extract Shared _run_git Helper (Code Quality)
 
 Evolution session timed out at 300s after completing partial work. The LLM identified that `repl.py` had 7 duplicated local `_run_git` function definitions across `_git_context`, `_git_diff_summary`, `_git_commit`, `_git_undo`, `_run_review`, `_run_git_log`, and `_run_pr_description`. It extracted a shared module-level `_run_git` helper and replaced 4 of the 7 local definitions before the timeout. Supervisor completed the remaining 3 replacements.
