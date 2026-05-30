@@ -531,8 +531,16 @@ async def _run_agent_turn(agent: Agent, user_input: str) -> None:
             elif event_type == AgentEvent.TOOL_END:
                 if data["is_error"]:
                     print(f" {RED}✗{RESET}")
+                    # Show error preview so user can see what went wrong
+                    preview = _format_tool_output_preview(data.get("output"), max_len=200, is_error=True)
+                    if preview:
+                        print(f"    {RED}{preview}{RESET}")
                 else:
                     print(f" {GREEN}✓{RESET}")
+                    # Show output preview so user gets immediate feedback
+                    preview = _format_tool_output_preview(data.get("output"), max_len=150)
+                    if preview:
+                        print(f"    {DIM}{preview}{RESET}")
 
             elif event_type == AgentEvent.DONE:
                 if in_text:
@@ -622,6 +630,60 @@ def _truncate_str(s: str, max_len: int) -> str:
     if len(s) <= max_len:
         return s
     return s[:max_len] + "..."
+
+
+def _format_tool_output_preview(
+    output: str | None,
+    max_len: int = 200,
+    max_lines: int = 3,
+    is_error: bool = False,
+) -> str:
+    """Format a short preview of tool output for display in the REPL.
+
+    Shows the first few lines of output, truncated to max_len chars.
+    This gives users immediate feedback without waiting for the LLM to
+    rephrase the result.
+
+    Args:
+        output: The tool output string (may be None).
+        max_len: Max characters to show (default 200).
+        max_lines: Max lines to show (default 3).
+        is_error: Whether this is an error output.
+
+    Returns a formatted preview string, or empty string if no output.
+    """
+    if not output:
+        return ""
+
+    # Split into lines, take first max_lines
+    lines = output.strip().splitlines()
+    total_chars = len(output)
+    total_lines = len(lines)
+
+    if total_lines <= max_lines and total_chars <= max_len:
+        return output.strip()
+
+    # Take first max_lines lines
+    preview_lines = lines[:max_lines]
+    preview = "\n".join(preview_lines)
+
+    # Truncate if still too long
+    if len(preview) > max_len:
+        preview = preview[:max_len]
+
+    # Add truncation indicator with stats
+    indicators = []
+    if total_lines > max_lines:
+        indicators.append(f"{total_lines - max_lines} more line{'s' if total_lines - max_lines != 1 else ''}")
+    if len(preview) < total_chars and total_lines <= max_lines:
+        indicators.append(f"{total_chars} chars total")
+
+    if indicators:
+        preview += f"… ({', '.join(indicators)})"
+    else:
+        preview += "…"
+
+    return preview
 
 
 def _run_git(*args: str, timeout: int = 10, workdir: str | None = None) -> subprocess.CompletedProcess:
