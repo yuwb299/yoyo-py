@@ -2,11 +2,12 @@
 
 ## Day 20 — Tool Output Preview & Auto-Save on Exit
 
-Two improvements committed today:
+Two improvements committed, plus one incomplete feature:
 1. **Tool output preview** (`_format_tool_output_preview`): Shows first few lines of tool output in the REPL (with truncation), so users get immediate feedback instead of seeing nothing until the agent's next text response. 9 tests added.
 2. **Auto-save on exit**: Added `_auto_save_session` and `_auto_save_on_exit` helpers that automatically save conversation history when quitting via /exit, /quit, or Ctrl+D. Prevents data loss from accidental exits. 6 tests added.
+3. **Partial /copy command** (incomplete): Test file `test_copy_command.py` was created with 10 tests for a `/copy` command (copy last assistant response to clipboard), but the command was never wired into the REPL dispatch chain in `repl.py`. Tests pass because they test helper functions only. The command is unreachable from the REPL.
 
-Baseline was 573 tests, now at 588. Both changes were small, focused, and well-tested. The REPL UX is noticeably better — you can see what tools are returning and your conversation is preserved on exit.
+Baseline was 573 tests, now at 598 (25 new tests). All 598 tests pass.
 
 ## Day 13 — Extract Shared _run_git Helper (Code Quality)
 
