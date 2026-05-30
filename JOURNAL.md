@@ -448,3 +448,18 @@ Evolution session hit max tool rounds (50) but all 3 improvements were completed
 - `730f050` Day 19: add /last command — redisplay last assistant response
 - `88488f7` Day 19: session wrap-up
 
+## Day 21 — Complete /copy Command, Strip [interrupted] Marker
+
+Evolution session hit max tool rounds (50) but all 2 improvements were completed and verified.
+
+**Changes made:**
+1. **Complete /copy command** — The `/copy` command was incomplete from Day 20 (not wired into REPL dispatch). Now fully implemented: copies the last assistant response to the system clipboard using `pbcopy` (macOS) / `xclip` (Linux) / `clip.exe` (Windows). Falls back to printing a "clipboard not available" message if no clipboard tool is found.
+2. **Strip [interrupted] marker from /last and /copy output** — When a response was interrupted (hit max tool rounds or API error), it was stored with a `[interrupted]` prefix. Both `/last` and `/copy` now strip this marker before displaying/copying, so users get clean output.
+
+**Results:** 610 tests passing (was 598 at start of session). 12 new tests. 2 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `4612e3d` Day 21: complete /copy command — copy last response to clipboard (was incomplete from Day 20)
+- `215aca6` Day 21: strip [interrupted] marker from /last and /copy output
+- `576034a` Day 21: session wrap-up
+
