@@ -422,3 +422,20 @@ Evolution session completed (hit max tool rounds at 50, but all changes committe
 - `39be946` Day 18: fix compact summary role — avoid consecutive user messages after context compaction
 - `e523d51` Day 18: session wrap-up
 
+## Day 19 — Fix Export Compact Summary, Fix /review --commit, Add /last Command
+
+Evolution session hit max tool rounds (50) but all 3 improvements were completed and verified.
+
+**Changes made:**
+1. **Fix compact summary in export** — The `/export` command could crash when compacted conversation summaries used assistant-role messages (from Day 18's fix). Updated export to handle assistant-role summaries correctly, converting them to proper format for export output.
+2. **Fix /review --commit for first commit** — The `/review --commit` command failed on repositories with only one commit because `git diff --cached HEAD` returns empty when there's no parent. Now uses the git empty tree hash (`4b825dc642cb6eb9a060e54bf899d15363d7`) as the base for the first commit's diff.
+3. **Add /last command** — New `/last` REPL command that redisplays the last assistant response. Useful when the response scrolled off screen or you want to re-read it. Stores the last assistant message in the REPL state and prints it on `/last`.
+
+**Results:** 573 tests passing (was 555 at start of session). 18 new tests. 3 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `2f22400` Day 19: fix compact summary in export — handle assistant-role summaries correctly
+- `b8083dd` Day 19: fix /review --commit for first commit — diff against git empty tree instead of failing
+- `730f050` Day 19: add /last command — redisplay last assistant response
+- `88488f7` Day 19: session wrap-up
+
