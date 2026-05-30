@@ -2,54 +2,16 @@
 
 from __future__ import annotations
 
-import os
 import sys
-import subprocess
 from unittest.mock import patch, MagicMock
 
 import pytest
 
-# We test the helper function directly
-# Import the REPL module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-
-def _find_last_assistant_response(messages: list[dict]) -> str | None:
-    """Extract the last assistant text response from messages."""
-    for msg in reversed(messages):
-        if msg.get("role") == "assistant":
-            content = msg.get("content", "")
-            if content and not content.startswith("[Context Summary]"):
-                return content
-    return None
-
-
-def _copy_to_clipboard(text: str) -> bool:
-    """Copy text to system clipboard. Returns True on success."""
-    try:
-        if sys.platform == "darwin":
-            proc = subprocess.run(["pbcopy"], input=text, text=True, timeout=5)
-            return proc.returncode == 0
-        elif sys.platform == "linux":
-            # Try xclip first, then xsel
-            for cmd in [["xclip", "-selection", "clipboard"], ["xclip"], ["xsel", "--clipboard"]]:
-                try:
-                    proc = subprocess.run(cmd, input=text, text=True, timeout=5)
-                    if proc.returncode == 0:
-                        return True
-                except FileNotFoundError:
-                    continue
-            return False
-        elif sys.platform == "win32":
-            proc = subprocess.run(["clip"], input=text, text=True, timeout=5)
-            return proc.returncode == 0
-        return False
-    except (subprocess.TimeoutExpired, OSError):
-        return False
+from src.repl import _copy_to_clipboard, _find_last_assistant_response
 
 
 class TestFindLastAssistantResponse:
-    """Test the helper function that finds the last response."""
+    """Test the helper that finds the last real assistant response."""
 
     def test_finds_last_assistant_message(self):
         messages = [
@@ -71,10 +33,24 @@ class TestFindLastAssistantResponse:
         messages = [{"role": "user", "content": "hello"}]
         assert _find_last_assistant_response(messages) is None
 
+    def test_skips_error_messages(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "[error: something broke]"},
+        ]
+        assert _find_last_assistant_response(messages) is None
+
+    def test_skips_interrupted_messages(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "[interrupted]"},
+        ]
+        assert _find_last_assistant_response(messages) is None
+
     def test_skips_compact_summaries(self):
         messages = [
             {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "[Context Summary] stuff"},
+            {"role": "assistant", "content": "[Summary of previous conversation]: stuff"},
             {"role": "user", "content": "hi"},
         ]
         assert _find_last_assistant_response(messages) is None
@@ -86,12 +62,19 @@ class TestFindLastAssistantResponse:
         ]
         assert _find_last_assistant_response(messages) is None
 
-    def test_finds_real_response_before_summary(self):
+    def test_skips_none_content(self):
+        messages = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": None, "tool_calls": [{"id": "1"}]},
+        ]
+        assert _find_last_assistant_response(messages) is None
+
+    def test_finds_real_response_before_error(self):
         messages = [
             {"role": "user", "content": "hello"},
             {"role": "assistant", "content": "Real response"},
             {"role": "user", "content": "more"},
-            {"role": "assistant", "content": "[Context Summary] stuff"},
+            {"role": "assistant", "content": "[error: API failed]"},
         ]
         assert _find_last_assistant_response(messages) == "Real response"
 
@@ -115,6 +98,31 @@ class TestCopyToClipboard:
             mock_run.return_value = MagicMock(returncode=1)
             result = _copy_to_clipboard("test text")
             assert result is False
+
+    @patch("subprocess.run")
+    def test_linux_xclip_success(self, mock_run):
+        with patch.object(sys, "platform", "linux"):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = _copy_to_clipboard("test text")
+            assert result is True
+
+    @patch("subprocess.run")
+    def test_linux_no_clipboard_tool(self, mock_run):
+        import subprocess as sp
+        mock_run.side_effect = FileNotFoundError("xclip not found")
+        with patch.object(sys, "platform", "linux"):
+            result = _copy_to_clipboard("test text")
+            assert result is False
+
+    @patch("subprocess.run")
+    def test_windows_clip_success(self, mock_run):
+        with patch.object(sys, "platform", "win32"):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = _copy_to_clipboard("test text")
+            assert result is True
+            mock_run.assert_called_once_with(
+                ["clip"], input="test text", text=True, timeout=5
+            )
 
     @patch("subprocess.run")
     def test_timeout_returns_false(self, mock_run):
