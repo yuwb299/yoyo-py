@@ -201,6 +201,13 @@ async def run_repl(
                 print(f"{DIM}  Redoing: {last_msg[:100]}{'...' if len(last_msg) > 100 else ''}{RESET}")
                 await _run_agent_turn(agent, last_msg)
                 continue
+            elif cmd == "/last":
+                last_response = _find_last_assistant_response(agent.state.messages)
+                if last_response is None:
+                    print(f"{DIM}  No previous response to show{RESET}\n")
+                else:
+                    print(last_response + "\n")
+                continue
             elif cmd == "/help":
                 _print_help()
                 continue
@@ -2483,6 +2490,40 @@ def _find_last_user_message(messages: list[dict]) -> str | None:
     return None
 
 
+def _find_last_assistant_response(messages: list[dict]) -> str | None:
+    """Find the last meaningful assistant text response in the conversation.
+
+    Skips:
+    - Error markers ([error: ...])
+    - Interrupted messages ([interrupted])
+    - Compact summaries
+    - Tool-call-only messages with no text content
+
+    Args:
+        messages: The conversation message list.
+
+    Returns:
+        The content of the last real assistant response, or None.
+    """
+    for msg in reversed(messages):
+        if msg.get("role") != "assistant":
+            continue
+        content = msg.get("content")
+        if not content:
+            continue
+        # Skip error messages
+        if content.startswith("[error:"):
+            continue
+        # Skip interrupted messages that have no real content before the marker
+        if content.strip() == "[interrupted]":
+            continue
+        # Skip compact summaries
+        if content.startswith("[Summary of previous conversation]"):
+            continue
+        return content
+    return None
+
+
 # Max chars to show in /system display — prevents flooding the terminal
 _SYSTEM_DISPLAY_LIMIT = 3000
 
@@ -2536,6 +2577,7 @@ def _print_help() -> None:
     {CYAN}/help{RESET}           Show this help
     {CYAN}/clear{RESET}          Clear conversation history
     {CYAN}/redo{RESET}           Re-send the last user prompt
+    {CYAN}/last{RESET}           Redisplay the last assistant response
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/cd [path]{RESET}      Change working directory (default: home)
     {CYAN}/model <name>{RESET}   Switch model (clears history)
