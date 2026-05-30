@@ -210,16 +210,18 @@ async def run_repl(
                 if last_response is None:
                     print(f"{DIM}  No previous response to show{RESET}\n")
                 else:
-                    print(last_response + "\n")
+                    print(_strip_interrupted_marker(last_response) + "\n")
                 continue
             elif cmd == "/copy":
                 last_response = _find_last_assistant_response(agent.state.messages)
                 if last_response is None:
                     print(f"{DIM}  No previous response to copy{RESET}\n")
-                elif _copy_to_clipboard(last_response):
-                    print(f"{GREEN}  ✓ Copied last response to clipboard{RESET}\n")
                 else:
-                    print(f"{YELLOW}  ⚠ Could not copy to clipboard — no clipboard tool available{RESET}\n")
+                    clean = _strip_interrupted_marker(last_response)
+                    if _copy_to_clipboard(clean):
+                        print(f"{GREEN}  ✓ Copied last response to clipboard{RESET}\n")
+                    else:
+                        print(f"{YELLOW}  ⚠ Could not copy to clipboard — no clipboard tool available{RESET}\n")
                 continue
             elif cmd == "/help":
                 _print_help()
@@ -2638,6 +2640,20 @@ def _copy_to_clipboard(text: str) -> bool:
         return False
     except (subprocess.TimeoutExpired, OSError):
         return False
+
+
+def _strip_interrupted_marker(content: str) -> str:
+    """Remove the trailing [interrupted] marker from a partial assistant response.
+
+    When the user copies or views an interrupted response, the [interrupted] marker
+    is noise — it was added by the agent to tag the message, not part of the actual
+    LLM output.
+    """
+    if content.endswith("\n[interrupted]"):
+        return content[:-len("\n[interrupted]")].rstrip()
+    if content.strip() == "[interrupted]":
+        return ""
+    return content
 
 
 def _find_last_user_message(messages: list[dict]) -> str | None:
