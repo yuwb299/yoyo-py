@@ -1881,7 +1881,7 @@ def _format_history(messages: list[dict], show_tokens: bool = False) -> str:
             continue
         elif tool_calls:
             # Assistant with tool calls — show which tools
-            tool_names = [tc["function"]["name"] for tc in tool_calls if "function" in tc]
+            tool_names = [tc["function"].get("name", "?") for tc in tool_calls if "function" in tc]
             tools_str = ", ".join(tool_names)
             text_preview = ""
             if content:
