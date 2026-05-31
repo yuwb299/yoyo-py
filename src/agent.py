@@ -574,8 +574,15 @@ class Agent:
                 break
 
         # Build a simple summary of old messages
+        # Cap total summary length to avoid blowing up the token budget.
+        # Each message contributes up to ~210 chars (200 content + role prefix).
+        # With _COMPACT_SUMMARY_MAX=4000, this is ~20 messages worth of context.
+        _COMPACT_SUMMARY_MAX = 4000
+        _SUMMARY_HEADER = "[Summary of previous conversation]:\n"
         summary_parts = []
-        for m in old:
+        total_len = len(_SUMMARY_HEADER)
+        skipped = 0
+        for idx, m in enumerate(old):
             role = m.get("role", "unknown")
             content = m.get("content") or ""
             # Include tool call names for assistant messages with tool_calls
@@ -586,11 +593,18 @@ class Agent:
             # Truncate very long content in summary
             if len(content) > 200:
                 content = content[:200] + "..."
-            summary_parts.append(f"[{role}]: {content}")
+            part = f"[{role}]: {content}"
+            # Check if adding this part would exceed the cap (account for newline)
+            if total_len + len(part) + 1 > _COMPACT_SUMMARY_MAX:
+                # Once we hit the cap, count remaining messages and stop
+                skipped = len(old) - idx
+                break
+            summary_parts.append(part)
+            total_len += len(part) + 1  # +1 for newline
 
-        summary_text = (
-            "[Summary of previous conversation]:\n" + "\n".join(summary_parts)
-        )
+        summary_text = _SUMMARY_HEADER + "\n".join(summary_parts)
+        if skipped:
+            summary_text += f"\n... ({skipped} more messages not shown)"
 
         # Choose summary role to avoid consecutive same-role messages:
         # If the first message in recent is a user message, the summary should be
