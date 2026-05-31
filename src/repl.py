@@ -223,6 +223,18 @@ async def run_repl(
                     else:
                         print(f"{YELLOW}  ⚠ Could not copy to clipboard — no clipboard tool available{RESET}\n")
                 continue
+            elif cmd == "/resume":
+                result = _handle_resume_command()
+                if isinstance(result, str):
+                    print(f"{DIM}  {result}{RESET}\n")
+                else:
+                    messages, model, usage = result
+                    agent.state.messages = messages
+                    agent.state.usage = usage
+                    provider.model = model
+                    real_count = len([m for m in messages if m.get("role") != "system"])
+                    print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}\n")
+                continue
             elif cmd == "/help":
                 _print_help()
                 continue
@@ -1024,6 +1036,71 @@ def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
         return (data["messages"], data["model"], usage)
     except Exception:
         return None
+
+
+def _handle_resume_command(cwd: str | None = None) -> tuple[list[dict], str, Usage] | str:
+    """Resume the last auto-saved session.
+
+    Checks for .yoyo/autosave.json in the current (or specified) directory.
+    If a valid auto-saved session exists (has real messages beyond system prompt
+    and is marked with "autosaved": true), returns (messages, model, usage) and
+    deletes the autosave file. Otherwise returns an error/status message string.
+
+    This gives users a simple /resume command to pick up where they left off
+    after an accidental exit, instead of having to know about .yoyo/autosave.json.
+
+    Args:
+        cwd: Working directory to look for autosave (defaults to os.getcwd()).
+
+    Returns:
+        Tuple of (messages, model, usage) on success, or a string error message.
+    """
+    from .provider import Usage as _Usage
+
+    workdir = cwd or os.getcwd()
+    autosave_path = Path(workdir) / ".yoyo" / "autosave.json"
+
+    if not autosave_path.exists():
+        return "No auto-saved session found — start a new conversation"
+
+    try:
+        data = json.loads(autosave_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, Exception):
+        return "[ERROR] Auto-save file is corrupted — delete .yoyo/autosave.json to clear"
+
+    # Only resume files that were auto-saved (not manual saves)
+    if not data.get("autosaved"):
+        return "No auto-saved session found — start a new conversation"
+
+    # Validate required fields
+    if "messages" not in data or "model" not in data:
+        return "[ERROR] Auto-save file is missing required fields"
+
+    messages = data["messages"]
+
+    # Check for real messages (not just system prompt)
+    real_msgs = [m for m in messages if m.get("role") != "system"]
+    if not real_msgs:
+        return "No auto-saved session found — start a new conversation"
+
+    # Restore usage
+    usage = _Usage()
+    if "usage" in data:
+        usage = _Usage(
+            input_tokens=data["usage"].get("input_tokens", 0),
+            output_tokens=data["usage"].get("output_tokens", 0),
+        )
+
+    model = data["model"]
+
+    # Delete the autosave file after successful resume so it doesn't get
+    # loaded again on next startup
+    try:
+        autosave_path.unlink()
+    except OSError:
+        pass  # Non-critical — worst case it gets loaded again
+
+    return (messages, model, usage)
 
 
 def _handle_cd_command(path: str) -> str:
@@ -2772,6 +2849,7 @@ def _print_help() -> None:
     {CYAN}/redo{RESET}           Re-send the last user prompt
     {CYAN}/last{RESET}           Redisplay the last assistant response
     {CYAN}/copy{RESET}           Copy last response to clipboard
+    {CYAN}/resume{RESET}         Resume last auto-saved session
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/cd [path]{RESET}      Change working directory (default: home)
     {CYAN}/model <name>{RESET}   Switch model (clears history)
