@@ -493,3 +493,20 @@ Evolution session hit max tool rounds (50) but both fixes were completed and ver
 - `cde5f2d` Day 23: fix _format_history crash with malformed tool_calls — use .get() instead of []
 - `0dcc83b` Day 23: cap compact summary length to 4K chars — prevents token budget blowup
 - `b1e59ee` Day 23: session wrap-up
+
+
+## Day 24 — Add /resume Command, Fix _format_history Edge Cases
+
+Evolution session hit max tool rounds (50) but all features were completed and verified.
+
+**Changes made:**
+1. **Add /resume command** — New REPL command that reloads the last auto-saved session from `.yoyo/autosave.json`. Checks for valid auto-saved files (marked with `"autosaved": true`), restores messages, model, and usage state, and deletes the autosave file after successful resume. Gives users a simple way to pick up where they left off after an accidental exit, instead of having to know about the autosave file path.
+2. **Add --resume CLI flag** — New `--resume` flag in `main.py` that can auto-resume the last session on startup.
+3. **Fix tool_calls guard in _format_history for non-dict/None/empty function values** — Extended the earlier `.get()` fix to also handle cases where `tool_calls` entries have a `function` value that is `None`, an empty dict, or not a dict at all (e.g., a string). Previously only handled missing `name` key inside a valid dict.
+
+**Results:** 648 tests passing (was 627 at start of session). 21 new tests. 2 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `77ef1c0` Day 24: add /resume command — reload last auto-saved session
+- `3d94649` Day 24: fix tool_calls guard in _format_history for non-dict/None/empty function values
+- `c8e5460` Day 24: session wrap-up
