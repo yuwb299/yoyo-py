@@ -477,3 +477,19 @@ Evolution session hit max tool rounds (50) but the fix was completed and verifie
 **Commits:**
 - `945370a` Day 22: Fix interrupted tool execution leaving invalid conversation state
 - `642fffd` Day 22: session wrap-up
+
+
+## Day 23 — Fix _format_history Crash, Cap Compact Summary Length
+
+Evolution session hit max tool rounds (50) but both fixes were completed and verified.
+
+**Changes made:**
+1. **Fix _format_history crash with malformed tool_calls** — `_format_history` in `repl.py` crashed when `tool_calls` entries had a `function` dict but no `name` key. Changed from `tc["function"]["name"]` to `tc.get("function", {}).get("name", "unknown")` using `.get()` instead of `[]` for safe access.
+2. **Cap compact summary length to 4K chars** — The `_compact_messages` method in `agent.py` could produce summaries as large as 22KB (14K estimated tokens) with many old messages, blowing up the token budget. Added a `_COMPACT_SUMMARY_MAX = 4000` constant that caps the summary to ~20 messages worth of context, with a "... (N more messages not shown)" trailer when messages are skipped.
+
+**Results:** 627 tests passing (was 615 at start of session). 12 new tests. 2 feature commits + 1 session wrap-up commit.
+
+**Commits:**
+- `cde5f2d` Day 23: fix _format_history crash with malformed tool_calls — use .get() instead of []
+- `0dcc83b` Day 23: cap compact summary length to 4K chars — prevents token budget blowup
+- `b1e59ee` Day 23: session wrap-up
