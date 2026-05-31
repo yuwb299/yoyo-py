@@ -89,6 +89,11 @@ def parse_args() -> argparse.Namespace:
         version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume last auto-saved session on startup",
+    )
+    parser.add_argument(
         "--list-providers",
         action="store_true",
         help="List available provider presets and exit",
