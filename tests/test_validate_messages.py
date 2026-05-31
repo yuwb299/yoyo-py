@@ -59,7 +59,7 @@ class TestValidateMessages:
         ]
         issues = Agent._validate_messages(messages)
         assert len(issues) >= 1
-        assert any("tool" in i.lower() and "tool_calls" in i.lower() for i in issues)
+        assert any("tool" in i.lower() and ("tool_calls" in i.lower() or "preceding" in i.lower()) for i in issues)
 
     def test_missing_tool_response(self):
         """Assistant has tool_calls but no matching tool response."""

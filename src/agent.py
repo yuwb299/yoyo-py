@@ -256,9 +256,26 @@ class Agent:
                 yield (AgentEvent.DONE, self.state.usage)
                 return
 
+            # Track which tool_call_ids have been answered so we can fill
+            # placeholders for unanswered ones on interrupt
+            answered_tool_ids: set[str] = set()
+
             # Execute tool calls
             for tc in tool_calls_list:
                 if self._interrupted:
+                    # Fill placeholder error messages for unanswered tool_calls
+                    # so the conversation stays valid (APIs reject unmatched tool_call_ids)
+                    unanswered = [
+                        t for t in tool_calls_list
+                        if t["id"] not in answered_tool_ids
+                    ]
+                    for t in unanswered:
+                        err = f"Tool execution skipped: interrupted"
+                        self.state.messages.append({
+                            "role": "tool",
+                            "tool_call_id": t["id"],
+                            "content": err,
+                        })
                     yield (AgentEvent.INTERRUPTED, None)
                     return
 
@@ -290,6 +307,7 @@ class Agent:
                                 "content": error_msg,
                             }
                         )
+                        answered_tool_ids.add(tool_call_id)
                         continue
 
                 yield (AgentEvent.TOOL_START, {"name": tool_name, "args": tool_args})
@@ -310,6 +328,7 @@ class Agent:
                             "content": denied_msg,
                         }
                     )
+                    answered_tool_ids.add(tool_call_id)
                     continue
 
                 if tool_name in self.tools:
@@ -326,6 +345,7 @@ class Agent:
                                 "content": str(result),
                             }
                         )
+                        answered_tool_ids.add(tool_call_id)
                     except TypeError as e:
                         # Missing or wrong arguments — common when LLM sends malformed JSON
                         error_msg = f"Error executing {tool_name}: {e} (args received: {tool_args})"
@@ -340,6 +360,7 @@ class Agent:
                                 "content": error_msg,
                             }
                         )
+                        answered_tool_ids.add(tool_call_id)
                     except Exception as e:
                         error_msg = f"Error executing {tool_name}: {e}"
                         yield (
@@ -353,6 +374,7 @@ class Agent:
                                 "content": error_msg,
                             }
                         )
+                        answered_tool_ids.add(tool_call_id)
                 else:
                     unknown_msg = f"Unknown tool: {tool_name}"
                     yield (
@@ -366,6 +388,7 @@ class Agent:
                             "content": unknown_msg,
                         }
                     )
+                    answered_tool_ids.add(tool_call_id)
 
         # Safety: exceeded max rounds — append assistant message so conversation stays valid
         max_rounds_msg = f"Exceeded max tool rounds ({self.state.max_tool_rounds})"
@@ -443,8 +466,13 @@ class Agent:
 
             elif role == "tool":
                 tc_id = m.get("tool_call_id", "")
-                # Tool must follow an assistant with tool_calls
-                if prev_role != "assistant" or not messages[i - 1].get("tool_calls"):
+                # Tool message must either follow the assistant with tool_calls,
+                # or follow another tool message (for multi-tool responses)
+                if prev_role not in ("assistant", "tool"):
+                    issues.append(
+                        f"Tool message at position {i} without preceding assistant or tool message"
+                    )
+                elif prev_role == "assistant" and not messages[i - 1].get("tool_calls"):
                     issues.append(
                         f"Tool message at position {i} without preceding assistant tool_calls"
                     )
