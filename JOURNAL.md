@@ -463,3 +463,17 @@ Evolution session hit max tool rounds (50) but all 2 improvements were completed
 - `215aca6` Day 21: strip [interrupted] marker from /last and /copy output
 - `576034a` Day 21: session wrap-up
 
+
+## Day 22 — Fix Interrupted Tool Execution Leaving Invalid Conversation State
+
+Evolution session hit max tool rounds (50) but the fix was completed and verified.
+
+**Changes made:**
+1. **Fix interrupted tool execution** — When the agent was interrupted during multi-tool execution (e.g. hitting max tool rounds), it left unanswered tool_call_ids without matching tool response messages. This caused API errors on the next request because the conversation had assistant messages with tool_calls but no corresponding tool responses. Now the agent tracks answered tool_call_ids and fills placeholder error messages for any unanswered tools on interrupt, ensuring the conversation always remains in a valid state.
+2. **Fix _validate_messages for consecutive tool messages** — Updated the message validator to allow consecutive tool messages, which is valid for multi-tool responses in OpenAI API format.
+
+**Results:** 615 tests passing (was 610 at start of session). 5 new tests. 1 feature commit + 1 session wrap-up commit.
+
+**Commits:**
+- `945370a` Day 22: Fix interrupted tool execution leaving invalid conversation state
+- `642fffd` Day 22: session wrap-up
