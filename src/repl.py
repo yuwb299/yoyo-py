@@ -29,6 +29,77 @@ RED = "\x1b[31m"
 MAGENTA = "\x1b[35m"
 
 
+# ── Readline support: history + tab completion ────────────────────────
+
+_HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".yoyo_history")
+_HISTORY_MAX = 500
+
+# All slash commands for tab completion
+_SLASH_COMMANDS = sorted([
+    "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
+    "/resume", "/compact", "/cd", "/model",
+    "/diff", "/log", "/commit", "/undo", "/review", "/pr",
+    "/tree", "/init", "/health", "/test", "/fix",
+    "/status", "/tokens", "/cost", "/history", "/system", "/env",
+    "/config", "/list-providers",
+    "/save", "/load", "/export", "/remember", "/memories", "/forget",
+    "/skills", "/commands",
+])
+
+
+def _setup_readline() -> None:
+    """Configure readline for persistent history and slash command completion.
+
+    Persistent history lets users press Up to recall commands from previous
+    sessions. Tab completion speeds up slash command entry.
+    """
+    try:
+        import readline
+    except ImportError:
+        return  # Not available on Windows or some minimal Python installs
+
+    # Tab completion for slash commands
+    readline.set_completer(_slash_completer)
+    readline.parse_and_bind("tab: complete")
+    # Use our completer as the only completion source (not filename completion)
+    readline.set_completer_delims(" \t\n")
+
+    # Load persistent history
+    try:
+        readline.read_history_file(_HISTORY_FILE)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+
+    # Limit history length
+    readline.set_history_length(_HISTORY_MAX)
+
+
+def _save_readline_history() -> None:
+    """Save readline history to disk. Silent on failure."""
+    try:
+        import readline
+        readline.write_history_file(_HISTORY_FILE)
+    except Exception:
+        pass
+
+
+def _slash_completer(text: str, state: int) -> str | None:
+    """Readline completer: suggests slash commands when input starts with /.
+
+    Returns the next matching completion, or None when exhausted.
+    This matches readline's completer protocol.
+    """
+    if not text.startswith("/"):
+        return None
+
+    matches = [cmd for cmd in _SLASH_COMMANDS if cmd.startswith(text)]
+    if state < len(matches):
+        return matches[state]
+    return None
+
+
 def print_banner() -> None:
     print(f"\n{BOLD}{CYAN}  yoyo-py{RESET} {DIM}v{__version__} — a self-evolving coding agent (Python + GLM 5){RESET}")
     print(f"{DIM}  Type /help for commands, /quit to exit{RESET}\n")
@@ -170,6 +241,9 @@ async def run_repl(
             # No autosave found or invalid — just start fresh silently
             pass
 
+    # Enable readline history + tab completion
+    _setup_readline()
+
     print_banner()
     print(f"{DIM}  model: {provider.model}{RESET}")
     if not skills.is_empty():
@@ -193,6 +267,7 @@ async def run_repl(
         except (EOFError, KeyboardInterrupt):
             # Auto-save on exit to prevent data loss
             _auto_save_on_exit(agent.state.messages, provider.model, usage=agent.state.usage)
+            _save_readline_history()
             print(f"\n{DIM}  bye 👋{RESET}\n")
             break
 
@@ -206,6 +281,7 @@ async def run_repl(
             if cmd in ("/quit", "/exit"):
                 # Auto-save on exit to prevent data loss
                 _auto_save_on_exit(agent.state.messages, provider.model, usage=agent.state.usage)
+                _save_readline_history()
                 print(f"\n{DIM}  bye 👋{RESET}\n")
                 break
             elif cmd == "/clear":
