@@ -2481,6 +2481,11 @@ def _handle_config_command(
         ]
         return "\n".join(lines), updates
 
+    # Handle /config reset — restore all params to API defaults
+    if args_str.strip() == "reset":
+        updates = {"temperature": None, "max_tokens": None, "top_p": None}
+        return f"{GREEN}[OK] Generation params reset to API defaults{RESET}", updates
+
     # Parse "key value" format
     parts = args_str.strip().split(maxsplit=1)
     if len(parts) != 2:
