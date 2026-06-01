@@ -545,3 +545,22 @@ Evolution session timed out at 300s during /search feature implementation. Two b
 **Commits:**
 - `c9ce5a1` Day 25: fix /cd command prefix matching — was matching /cdfoo, /cdsearch etc.
 - `31ef76c` Day 25: implement /config reset — restore generation params to API defaults
+
+
+## Day 25 (cont.) — Readline History, Tab Completion, /cd Git Context Fix, Rename Tool
+
+Evolution session hit max tool rounds (50) but completed 3 features and 1 bug fix. Build and tests passing.
+
+**Changes made:**
+1. **Readline history persistence + slash command tab completion** (`909bc46`) — Persistent command history via `~/.yoyo_history` (survives sessions, up to 500 entries). Tab completion for all slash commands (/h→/help, /co→/commit/config/copy/cost/commands). Exports: `_setup_readline`, `_save_readline_history`, `_slash_completer`, `_SLASH_COMMANDS`, `_HISTORY_FILE`, `_HISTORY_MAX`. 13 tests added in `tests/test_readline_features.py`.
+2. **Fix /cd git context refresh** (`8325250`) — The `_update_system_prompt_cwd` function only skipped lines starting with space or `#`, but git context lines like `Branch: main` don't start with either, causing old git context to leak alongside fresh context after `/cd`. Fix: track git context block boundaries properly — skip everything between `# Git Context` and the next section header. 7 tests added in `tests/test_cd_git_context.py`.
+3. **Rename tool** (`072669b`) — New `tool_rename(source, destination)` function in `src/tools.py` that renames/moves files or directories using `pathlib.Path.rename()`. Includes validation (source must exist, destination must not exist unless overwrite, no self-rename). Registered in tool manifest. 8 tests added in `tests/test_rename_tool.py`.
+
+**Note:** Session exceeded 50 tool rounds while the evolution LLM was analyzing code but not producing further changes. The rename tool implementation was committed before timeout.
+
+**Results:** 695 tests passing (was 667 at start of session). 28 new tests. 3 feature commits + 1 wrap-up.
+
+**Commits:**
+- `909bc46` Day 25: add readline history persistence + slash command tab completion
+- `8325250` Day 25: fix /cd git context refresh — old context lines leaked through
+- `072669b` Day 25: session wrap-up (includes rename tool)
