@@ -1245,22 +1245,35 @@ def _update_system_prompt_cwd(messages: list[dict]) -> None:
 
     if updated:
         # Also refresh git context section if present
+        # The git context block starts with "# Git Context" and ends at
+        # the next section header (line starting with # that isn't the header)
+        # or at the end of the content.
         new_lines = []
         skip_git = False
         for line in lines:
-            if line.startswith("# Git Context"):
+            if line.strip() == "# Git Context":
                 skip_git = True
                 continue
-            if skip_git and (line.startswith("#") or not line.startswith(" ")):
-                skip_git = False
-                # Insert fresh git context
-                git_ctx = _git_context()
-                if git_ctx:
-                    new_lines.append(git_ctx)
-                new_lines.append(line)
+            if skip_git:
+                # Git context ends at the next section header (starts with #)
+                # but not at continuation lines like "Branch:" or "  file.py"
+                if line.startswith("#") and line.strip() != "# Git Context":
+                    skip_git = False
+                    # Insert fresh git context before this line
+                    git_ctx = _git_context()
+                    if git_ctx:
+                        new_lines.append(git_ctx)
+                    new_lines.append(line)
+                    continue
+                # Still inside git context — skip old lines
                 continue
-            if not skip_git:
-                new_lines.append(line)
+            new_lines.append(line)
+
+        # If git context was at the end and we're still skipping, add fresh context
+        if skip_git:
+            git_ctx = _git_context()
+            if git_ctx:
+                new_lines.append(git_ctx)
 
         messages[0]["content"] = "\n".join(new_lines)
 
