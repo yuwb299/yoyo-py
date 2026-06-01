@@ -391,6 +391,43 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
         return f"[ERROR] {e}"
 
 
+def tool_rename(source: str, destination: str) -> str:
+    """Rename or move a file or directory.
+
+    Works across directories (acts as a move). Refuses to overwrite
+    existing files at the destination.
+
+    Args:
+        source: Current path of the file or directory.
+        destination: New path for the file or directory.
+
+    Returns:
+        Confirmation or error message.
+    """
+    try:
+        if not source:
+            return "[ERROR] source path cannot be empty"
+        if not destination:
+            return "[ERROR] destination path cannot be empty"
+
+        src = Path(source)
+        dst = Path(destination)
+
+        if not src.exists():
+            return f"[ERROR] Source not found: {source}"
+        if dst.exists():
+            return f"[ERROR] Destination already exists: {destination}"
+
+        # Create parent directories if needed (e.g. moving to a new subdir)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+        src.rename(dst)
+        return f"[OK] Renamed {source} → {destination}"
+
+    except Exception as e:
+        return f"[ERROR] {e}"
+
+
 # ─── Tool schemas (OpenAI function calling format) ──────────────────
 
 TOOL_SCHEMAS = [
@@ -606,6 +643,27 @@ TOOL_SCHEMAS = [
                     },
                 },
                 "required": ["pattern"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename",
+            "description": "Rename or move a file or directory. Works across directories. Refuses to overwrite existing files.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "description": "Current path of the file or directory.",
+                    },
+                    "destination": {
+                        "type": "string",
+                        "description": "New path for the file or directory.",
+                    },
+                },
+                "required": ["source", "destination"],
             },
         },
     },
