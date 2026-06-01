@@ -527,3 +527,21 @@ Evolution session timed out at 300s but the feature was completed and verified.
 
 **Commits:**
 - `6e844d8` Day 25: wire up --resume CLI flag — pass resume from main() to run_repl(), add restore logic and comprehensive tests
+
+
+## Day 25 (cont.) — Bug Fixes: /cd Prefix, /config Reset
+
+Evolution session timed out at 300s during /search feature implementation. Two bug fixes were completed and committed; the /search feature was not started (no uncommitted work).
+
+**Changes made:**
+1. **Fix /cd command prefix matching** — `cmd.startswith("/cd")` was too broad, matching `/cdfoo`, `/cdsearch` etc. Changed to `cmd == "/cd" or cmd.startswith("/cd ")` for exact matching. Added 9 tests in `tests/test_cd_prefix_fix.py`.
+2. **Implement /config reset** — `/config reset` was documented in Day 13 journal but never implemented; it just showed "Usage" instead of resetting. Added reset handling that sets temperature, max_tokens, and top_p to `None` (API defaults). Added 3 tests in `tests/test_config_reset.py`.
+
+**Not completed:**
+- `/search` command for conversation keyword search — timed out before implementation started.
+
+**Results:** 667 tests passing (was 655 at start of session). 12 new tests. 2 bug-fix commits.
+
+**Commits:**
+- `c9ce5a1` Day 25: fix /cd command prefix matching — was matching /cdfoo, /cdsearch etc.
+- `31ef76c` Day 25: implement /config reset — restore generation params to API defaults
