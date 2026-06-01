@@ -130,6 +130,7 @@ async def run_repl(
     initial_prompt: str | None = None,
     pipe_input: str | None = None,
     auto_approve: bool = False,
+    resume: bool = False,
 ) -> None:
     """Run the interactive REPL loop."""
     # Load skills
@@ -154,6 +155,20 @@ async def run_repl(
         verbose=verbose,
         confirm_fn=confirm_fn,
     )
+
+    # Handle --resume flag: restore last auto-saved session before starting REPL
+    if resume and not pipe_input and not initial_prompt:
+        result = _handle_resume_command()
+        if isinstance(result, tuple):
+            messages, model, usage = result
+            agent.state.messages = messages
+            agent.state.usage = usage
+            provider.model = model
+            real_count = len([m for m in messages if m.get("role") != "system"])
+            print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}\n")
+        else:
+            # No autosave found or invalid — just start fresh silently
+            pass
 
     print_banner()
     print(f"{DIM}  model: {provider.model}{RESET}")

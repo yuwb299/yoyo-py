@@ -154,6 +154,7 @@ def main() -> None:
             initial_prompt=args.prompt,
             pipe_input=pipe_input,
             auto_approve=args.yes,
+            resume=args.resume,
         )
     )
 
