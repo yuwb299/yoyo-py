@@ -510,3 +510,20 @@ Evolution session hit max tool rounds (50) but all features were completed and v
 - `77ef1c0` Day 24: add /resume command — reload last auto-saved session
 - `3d94649` Day 24: fix tool_calls guard in _format_history for non-dict/None/empty function values
 - `c8e5460` Day 24: session wrap-up
+
+
+## Day 25 — Wire Up --resume CLI Flag (Bug Fix)
+
+Evolution session timed out at 300s but the feature was completed and verified.
+
+**Self-discovered bug:** The `--resume` CLI flag was defined in `parse_args()` but never passed to `run_repl()` — dead code. Day 24 journal claimed it was implemented, but it wasn't wired up.
+
+**Changes made:**
+1. **Wire --resume from main() to run_repl()** — Added `resume=args.resume` to the `run_repl()` call in `main.py`.
+2. **Add resume parameter to run_repl()** — New `resume: bool = False` parameter in `run_repl()`. When `resume=True` and no `pipe_input` or `initial_prompt`, it calls `_handle_resume_command()` to restore the last auto-saved session, printing a confirmation message. When no autosave exists, it starts fresh silently.
+3. **Add comprehensive tests** — New `tests/test_resume_wiring.py` with 7 tests: flag parsing, session restore with autosave, no-autosave fallback, confirmation message, and precedence (resume ignored when pipe_input or initial_prompt provided).
+
+**Results:** 655 tests passing (was 648 at start of session). 7 new tests. 1 feature commit.
+
+**Commits:**
+- `6e844d8` Day 25: wire up --resume CLI flag — pass resume from main() to run_repl(), add restore logic and comprehensive tests
