@@ -279,7 +279,7 @@ async def run_repl(
                 print(_git_undo())
                 print()
                 continue
-            elif cmd.startswith("/cd"):
+            elif cmd == "/cd" or cmd.startswith("/cd "):
                 target = line[3:].strip() if len(line) > 3 else ""
                 result = _handle_cd_command(target)
                 print(result)
