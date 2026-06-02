@@ -709,6 +709,10 @@ def _tool_summary(name: str, args: dict) -> str:
     elif name == "mkdir":
         path = args.get("path", ".")
         return f"mkdir {path}"
+    elif name == "rename":
+        src = args.get("source", "?")
+        dst = args.get("destination", "?")
+        return f"rename {src} → {dst}"
     return name
 
 

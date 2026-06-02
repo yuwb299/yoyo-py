@@ -50,7 +50,7 @@ class Agent:
     """
 
     # Tools that modify state and should require user confirmation
-    DESTRUCTIVE_TOOLS = {"bash", "write_file", "edit_file"}
+    DESTRUCTIVE_TOOLS = {"bash", "write_file", "edit_file", "rename"}
 
     def __init__(
         self,

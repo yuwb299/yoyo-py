@@ -679,6 +679,7 @@ TOOL_FUNCTIONS = {
     "list_files": tool_list_files,
     "mkdir": tool_mkdir,
     "glob": tool_glob,
+    "rename": tool_rename,
 }
 
 
