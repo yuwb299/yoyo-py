@@ -40,7 +40,7 @@ class TestLoadSessionValidation:
 
         result = _load_session(str(session_file))
         assert result is not None
-        loaded_messages, model, usage = result
+        loaded_messages, model, usage, warnings = result
         assert len(loaded_messages) == 3
         assert model == "glm-5.1"
 
@@ -68,7 +68,7 @@ class TestLoadSessionValidation:
         result = _load_session(str(session_file))
         assert result is not None
         # Messages are still loaded — validation is informational
-        loaded_messages, _, _ = result
+        loaded_messages, _, _, warnings = result
         assert len(loaded_messages) == 4
 
     def test_load_session_with_orphaned_tool_message(self, tmp_path):
