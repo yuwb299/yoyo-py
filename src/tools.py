@@ -4,7 +4,7 @@ Each tool is:
 1. A Python function that does the work
 2. An OpenAI-format function schema for the LLM to understand
 
-Tools: bash, read_file, write_file, edit_file, search, list_files, mkdir, glob
+Tools: bash, read_file, write_file, edit_file, search, list_files, mkdir, glob, rename
 """
 
 from __future__ import annotations
