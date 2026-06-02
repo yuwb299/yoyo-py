@@ -435,7 +435,7 @@ async def run_repl(
                 print(_git_diff_summary())
                 print()
                 continue
-            elif cmd.startswith("/log"):
+            elif cmd == "/log" or cmd.startswith("/log "):
                 # /log, /log N, /log --oneline, /log N --oneline
                 log_args = line[4:].strip() if len(line) > 4 else ""
                 count = 10
@@ -504,12 +504,12 @@ async def run_repl(
                     await _run_agent_turn(agent, pr_result)
                 print()
                 continue
-            elif cmd.startswith("/init"):
+            elif cmd == "/init" or cmd.startswith("/init "):
                 force = "--force" in cmd
                 print(_run_init_command(force=force))
                 print()
                 continue
-            elif cmd.startswith("/commit"):
+            elif cmd == "/commit" or cmd.startswith("/commit "):
                 # Extract everything after "/commit " as the message
                 msg = line[7:].strip() if len(line) > 7 else ""
                 if not msg:
@@ -518,7 +518,7 @@ async def run_repl(
                 print(_git_commit(msg))
                 print()
                 continue
-            elif cmd.startswith("/save"):
+            elif cmd == "/save" or cmd.startswith("/save "):
                 # Save session to a file
                 save_path = line[5:].strip() if len(line) > 5 else ""
                 if not save_path:
@@ -527,7 +527,7 @@ async def run_repl(
                 print(_save_session(save_path, agent.state.messages, provider.model, usage=agent.state.usage))
                 print()
                 continue
-            elif cmd.startswith("/export"):
+            elif cmd == "/export" or cmd.startswith("/export "):
                 # Export conversation as markdown
                 export_path = line[7:].strip() if len(line) > 7 else ""
                 include_system = "--system" in export_path
@@ -543,7 +543,7 @@ async def run_repl(
                 ))
                 print()
                 continue
-            elif cmd.startswith("/load"):
+            elif cmd == "/load" or cmd.startswith("/load "):
                 # Load session from a file
                 load_path = line[5:].strip() if len(line) > 5 else ""
                 if not load_path:
@@ -561,7 +561,7 @@ async def run_repl(
                 print(f"{GREEN}  Session loaded from {load_path}{RESET}")
                 print(f"{DIM}  {msg_count} messages, model: {model}{RESET}\n")
                 continue
-            elif cmd.startswith("/remember"):
+            elif cmd == "/remember" or cmd.startswith("/remember "):
                 # Remember a project fact
                 text = line[9:].strip() if len(line) > 9 else ""
                 if not text:
@@ -588,7 +588,7 @@ async def run_repl(
                             print(f"    {CYAN}/{name}{RESET}")
                 print()
                 continue
-            elif cmd.startswith("/forget"):
+            elif cmd == "/forget" or cmd.startswith("/forget "):
                 # Forget a memory by ID
                 mem_id_str = line[7:].strip() if len(line) > 7 else ""
                 if not mem_id_str:
