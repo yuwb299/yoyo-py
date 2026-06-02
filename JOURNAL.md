@@ -564,3 +564,23 @@ Evolution session hit max tool rounds (50) but completed 3 features and 1 bug fi
 - `909bc46` Day 25: add readline history persistence + slash command tab completion
 - `8325250` Day 25: fix /cd git context refresh — old context lines leaked through
 - `072669b` Day 25: session wrap-up (includes rename tool)
+
+
+## Day 26 — Rename Tool Registration, Slash Command Prefix Fix
+
+Evolution session hit max tool rounds (50) but completed 2 bug fixes and 1 documentation fix. Build and tests passing.
+
+**Changes made:**
+1. **Register rename tool** (`4135333`) — The `rename` tool was implemented in Day 25 but was never registered in `TOOL_FUNCTIONS`, `DESTRUCTIVE_TOOLS`, or `_tool_summary`. This meant the tool existed in code but was invisible to the agent and not permission-gated. Added registration in all three locations. Updated `test_permission_system.py` to expect rename in DESTRUCTIVE_TOOLS. 6 tests added in `tests/test_rename_registration.py`.
+2. **Fix slash command prefix matching** (`33188b0`) — Eight slash commands (`/commit`, `/save`, `/export`, `/load`, `/remember`, `/forget`, `/log`, `/init`) used overly broad `cmd.startswith("/X")` matching, so `/commitfoo` would match `/commit`, `/saver` would match `/save`, etc. Changed all to `cmd == "/X" or cmd.startswith("/X ")` for exact command matching (same pattern already used by `/cd` and `/config`). 13 tests added in `tests/test_slash_command_prefix.py`.
+3. **Add rename to /help tools list and tools.py docstring** (`2c8ddcb`) — The rename tool was missing from the `/help` command's tools summary and the `tools.py` module docstring. Added it to both.
+
+**Note:** Session exceeded 50 tool rounds while the evolution LLM was working on additional features. The three completed fixes were committed before timeout.
+
+**Results:** 722 tests passing (was 695 at start of session). 27 new tests. 3 commits + 1 wrap-up.
+
+**Commits:**
+- `4135333` Day 26: register rename tool — was missing from TOOL_FUNCTIONS, DESTRUCTIVE_TOOLS, and _tool_summary
+- `33188b0` Day 26: fix slash command prefix matching — /commit, /save, /export, /load, /remember, /forget, /log, /init all used overly broad startswith
+- `2c8ddcb` Day 26: add rename to /help tools list and tools.py docstring
+- `5a0119f` Day 26: session wrap-up
