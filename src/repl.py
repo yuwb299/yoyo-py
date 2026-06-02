@@ -40,7 +40,7 @@ _SLASH_COMMANDS = sorted([
     "/resume", "/compact", "/cd", "/model",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
     "/tree", "/init", "/health", "/test", "/fix",
-    "/status", "/tokens", "/cost", "/history", "/system", "/env",
+    "/status", "/tokens", "/cost", "/history", "/search", "/system", "/env",
     "/config", "/list-providers",
     "/save", "/load", "/export", "/remember", "/memories", "/forget",
     "/skills", "/commands",
@@ -396,6 +396,26 @@ async def run_repl(
                 # Use original line (not lowercase cmd) to preserve --tokens flag
                 show_tokens = "--tokens" in line
                 print(_format_history(agent.state.messages, show_tokens=show_tokens))
+                print()
+                continue
+            elif cmd == "/search" or cmd.startswith("/search "):
+                # Search conversation history by keyword
+                search_args = line[7:].strip() if len(line) > 7 else ""
+                if not search_args:
+                    print(f"{YELLOW}Usage: /search <keyword> [--case]{RESET}")
+                    print()
+                    continue
+                case_sensitive = "--case" in search_args
+                keyword = search_args.replace("--case", "").strip()
+                if not keyword:
+                    print(f"{YELLOW}Usage: /search <keyword> [--case]{RESET}")
+                    print()
+                    continue
+                print(_search_conversation(
+                    agent.state.messages,
+                    keyword,
+                    case_sensitive=case_sensitive,
+                ))
                 print()
                 continue
             elif cmd == "/cost":
@@ -2846,6 +2866,70 @@ def _strip_interrupted_marker(content: str) -> str:
     return content
 
 
+def _search_conversation(
+    messages: list[dict],
+    keyword: str,
+    case_sensitive: bool = False,
+) -> str:
+    """Search conversation history for a keyword and return matching messages.
+
+    Shows each matching message with its role, position index, and a content
+    preview with the keyword highlighted.
+
+    Args:
+        messages: The conversation messages list.
+        keyword: The search term to look for.
+        case_sensitive: If True, match case exactly.
+
+    Returns a formatted string with search results.
+    """
+    if not messages:
+        return "No messages in conversation."
+
+    if not keyword.strip():
+        return f"{YELLOW}Usage: /search <keyword> [--case]{RESET}"
+
+    flags = 0 if case_sensitive else re.IGNORECASE
+
+    # Role icons
+    role_icons = {
+        "system": "⚙",
+        "user": "👤",
+        "assistant": "🤖",
+        "tool": "🔧",
+    }
+
+    matches = []
+    for i, msg in enumerate(messages):
+        role = msg.get("role", "unknown")
+        content = msg.get("content") or ""
+
+        if not re.search(keyword, content, flags):
+            continue
+
+        icon = role_icons.get(role, "•")
+        # Show a preview with the match highlighted
+        # Find the match position and show context around it
+        match = re.search(keyword, content, flags)
+        if match:
+            start = max(0, match.start() - 30)
+            end = min(len(content), match.end() + 50)
+            preview = content[start:end]
+            if start > 0:
+                preview = "..." + preview
+            if end < len(content):
+                preview = preview + "..."
+
+            role_color = CYAN if role == "user" else (GREEN if role == "assistant" else DIM)
+            matches.append(f"  {icon} {role_color}{role}#{i}{RESET} {DIM}{preview}{RESET}")
+
+    if not matches:
+        return f"{DIM}No matches found for '{keyword}'{RESET}"
+
+    header = f"{BOLD}Search Results{RESET} ({len(matches)} match{'es' if len(matches) != 1 else ''} for '{keyword}')"
+    return header + "\n" + "\n".join(matches)
+
+
 def _find_last_user_message(messages: list[dict]) -> str | None:
     """Find the last real user message (not a compact summary) in the conversation.
 
@@ -2989,6 +3073,7 @@ def _print_help() -> None:
     {CYAN}/tokens{RESET}         Show token usage
     {CYAN}/cost{RESET}           Estimate API cost from token usage
     {CYAN}/history{RESET}        Show conversation history (--tokens for estimates)
+    {CYAN}/search <keyword>{RESET} Search conversation history (--case for case-sensitive)
     {CYAN}/system{RESET}         View current system prompt
     {CYAN}/env{RESET}            Show provider config (model, base URL, API key)
 
