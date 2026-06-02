@@ -584,3 +584,16 @@ Evolution session hit max tool rounds (50) but completed 2 bug fixes and 1 docum
 - `33188b0` Day 26: fix slash command prefix matching — /commit, /save, /export, /load, /remember, /forget, /log, /init all used overly broad startswith
 - `2c8ddcb` Day 26: add rename to /help tools list and tools.py docstring
 - `5a0119f` Day 26: session wrap-up
+
+
+## Day 27 — /search Command for Conversation History
+
+Evolution session timed out at 300s after completing one feature. The LLM was starting a second improvement (validate messages on session load) when the timeout hit. Build and tests passing.
+
+**Changes made:**
+1. **Add /search command** (`c4da6e5`) — New `_search_conversation()` function in `src/repl.py` that searches conversation history by keyword, returning matching messages with line numbers and context. Supports optional case-insensitive mode via `/search -i <query>`. Wired into REPL dispatch near `/history` command. Added to help text. 10 tests added in `tests/test_search_command.py`.
+
+**Results:** 732 tests passing (was 722 at start of session). 10 new tests. 1 feature commit.
+
+**Commits:**
+- `c4da6e5` Day 27: add /search command — search conversation history by keyword
