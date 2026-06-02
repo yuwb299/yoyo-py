@@ -36,7 +36,7 @@ def test_load_session_restores_usage():
 
         result = _load_session(path)
         assert result is not None
-        loaded_messages, loaded_model, loaded_usage = result
+        loaded_messages, loaded_model, loaded_usage, warnings = result
         assert loaded_usage is not None
         assert loaded_usage.input_tokens == 200
         assert loaded_usage.output_tokens == 80
@@ -57,13 +57,13 @@ def test_load_session_without_usage_defaults_to_zero():
 
         result = _load_session(path)
         assert result is not None
-        _, _, loaded_usage = result
+        _, _, loaded_usage, _ = result
         assert loaded_usage.input_tokens == 0
         assert loaded_usage.output_tokens == 0
 
 
-def test_load_session_returns_three_tuple():
-    """_load_session should now return (messages, model, usage) tuple."""
+def test_load_session_returns_four_tuple():
+    """_load_session should now return (messages, model, usage, warnings) tuple."""
     messages = [{"role": "user", "content": "test"}]
     usage = Usage(input_tokens=10, output_tokens=5)
 
@@ -73,4 +73,4 @@ def test_load_session_returns_three_tuple():
 
         result = _load_session(path)
         assert result is not None
-        assert len(result) == 3
+        assert len(result) == 4

@@ -57,7 +57,7 @@ class TestHandleResumeCommand:
             result = _handle_resume_command(cwd=tmpdir)
             # Should return a tuple of (messages, model, usage) for valid autosave
             assert isinstance(result, tuple)
-            messages, model, usage = result
+            messages, model, usage, warnings = result
             assert model == "test-model"
             assert len(messages) == 3
             assert messages[1]["content"] == "Hello"
@@ -82,7 +82,7 @@ class TestHandleResumeCommand:
 
             result = _handle_resume_command(cwd=tmpdir)
             assert isinstance(result, tuple)
-            messages, model, usage = result
+            messages, model, usage, warnings = result
             assert usage.input_tokens == 0
             assert usage.output_tokens == 0
 
@@ -162,7 +162,7 @@ class TestResumeSummary:
 
             result = _handle_resume_command(cwd=tmpdir)
             assert isinstance(result, tuple)
-            messages, model, usage = result
+            messages, model, usage, warnings = result
             # Verify the data is correct
             assert len(messages) == 3
             assert model == "glm-5.1"

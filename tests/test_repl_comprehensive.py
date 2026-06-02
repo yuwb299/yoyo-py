@@ -170,7 +170,7 @@ class TestSessionSaveLoadRoundTrip:
 
         loaded = _load_session(path)
         assert loaded is not None
-        loaded_messages, loaded_model, loaded_usage = loaded
+        loaded_messages, loaded_model, loaded_usage, warnings = loaded
         assert loaded_messages == messages
         assert loaded_model == model
 

@@ -37,7 +37,7 @@ class TestResumeCLI:
 
         result = _handle_resume_command(cwd=str(tmp_path))
         assert isinstance(result, tuple)
-        messages, model, usage = result
+        messages, model, usage, warnings = result
         assert len(messages) == 3
         assert model == "glm-5.1"
         assert usage.input_tokens == 100

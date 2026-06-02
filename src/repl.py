@@ -231,12 +231,17 @@ async def run_repl(
     if resume and not pipe_input and not initial_prompt:
         result = _handle_resume_command()
         if isinstance(result, tuple):
-            messages, model, usage = result
+            messages, model, usage, warnings = result
             agent.state.messages = messages
             agent.state.usage = usage
             provider.model = model
             real_count = len([m for m in messages if m.get("role") != "system"])
-            print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}\n")
+            print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}")
+            if warnings:
+                print(f"{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}")
+                for w in warnings[:5]:
+                    print(f"{YELLOW}    • {w}{RESET}")
+            print()
         else:
             # No autosave found or invalid — just start fresh silently
             pass
@@ -319,12 +324,17 @@ async def run_repl(
                 if isinstance(result, str):
                     print(f"{DIM}  {result}{RESET}\n")
                 else:
-                    messages, model, usage = result
+                    messages, model, usage, warnings = result
                     agent.state.messages = messages
                     agent.state.usage = usage
                     provider.model = model
                     real_count = len([m for m in messages if m.get("role") != "system"])
-                    print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}\n")
+                    print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}")
+                    if warnings:
+                        print(f"{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}")
+                        for w in warnings[:5]:
+                            print(f"{YELLOW}    • {w}{RESET}")
+                    print()
                 continue
             elif cmd == "/help":
                 _print_help()
@@ -573,13 +583,18 @@ async def run_repl(
                     print(f"{RED}  Failed to load session from {load_path}{RESET}")
                     print(f"{DIM}  File may not exist or be invalid{RESET}\n")
                     continue
-                messages, model, usage = result
+                messages, model, usage, warnings = result
                 agent.state.messages = messages
                 agent.state.usage = usage
                 provider.model = model
                 msg_count = len([m for m in messages if m.get("role") != "system"])
                 print(f"{GREEN}  Session loaded from {load_path}{RESET}")
-                print(f"{DIM}  {msg_count} messages, model: {model}{RESET}\n")
+                print(f"{DIM}  {msg_count} messages, model: {model}{RESET}")
+                if warnings:
+                    print(f"{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}")
+                    for w in warnings[:5]:
+                        print(f"{YELLOW}    • {w}{RESET}")
+                print()
                 continue
             elif cmd == "/remember" or cmd.startswith("/remember "):
                 # Remember a project fact
@@ -1119,13 +1134,17 @@ def _auto_save_on_exit(
     except Exception:
         pass  # Silent on exit — don't crash during shutdown
 
-def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
+def _load_session(filepath: str) -> tuple[list[dict], str, Usage, list[str]] | None:
     """Load a conversation session from a JSON file.
 
     Args:
         filepath: Path to the session file.
 
-    Returns (messages, model, usage) tuple, or None on failure.
+    Returns (messages, model, usage, warnings) tuple, or None on failure.
+    The warnings list contains human-readable strings about any message
+    structure issues found (consecutive same-role messages, orphaned tool
+    messages, etc.). The messages are always returned — warnings are
+    informational and help the user fix problems before they cause API errors.
     """
     from .provider import Usage as _Usage
 
@@ -1148,18 +1167,26 @@ def _load_session(filepath: str) -> tuple[list[dict], str, Usage] | None:
                 output_tokens=data["usage"].get("output_tokens", 0),
             )
 
-        return (data["messages"], data["model"], usage)
+        # Validate message structure — issues are informational, not blocking
+        warnings: list[str] = []
+        messages = data["messages"]
+        if messages:
+            from .agent import Agent
+            issues = Agent._validate_messages(messages)
+            warnings = issues
+
+        return (messages, data["model"], usage, warnings)
     except Exception:
         return None
 
 
-def _handle_resume_command(cwd: str | None = None) -> tuple[list[dict], str, Usage] | str:
+def _handle_resume_command(cwd: str | None = None) -> tuple[list[dict], str, Usage, list[str]] | str:
     """Resume the last auto-saved session.
 
     Checks for .yoyo/autosave.json in the current (or specified) directory.
     If a valid auto-saved session exists (has real messages beyond system prompt
-    and is marked with "autosaved": true), returns (messages, model, usage) and
-    deletes the autosave file. Otherwise returns an error/status message string.
+    and is marked with "autosaved": true), returns (messages, model, usage, warnings)
+    and deletes the autosave file. Otherwise returns an error/status message string.
 
     This gives users a simple /resume command to pick up where they left off
     after an accidental exit, instead of having to know about .yoyo/autosave.json.
@@ -1168,7 +1195,7 @@ def _handle_resume_command(cwd: str | None = None) -> tuple[list[dict], str, Usa
         cwd: Working directory to look for autosave (defaults to os.getcwd()).
 
     Returns:
-        Tuple of (messages, model, usage) on success, or a string error message.
+        Tuple of (messages, model, usage, warnings) on success, or a string error message.
     """
     from .provider import Usage as _Usage
 
@@ -1215,7 +1242,13 @@ def _handle_resume_command(cwd: str | None = None) -> tuple[list[dict], str, Usa
     except OSError:
         pass  # Non-critical — worst case it gets loaded again
 
-    return (messages, model, usage)
+    # Validate message structure — warn about issues but don't block
+    warnings: list[str] = []
+    if messages:
+        from .agent import Agent
+        warnings = Agent._validate_messages(messages)
+
+    return (messages, model, usage, warnings)
 
 
 def _handle_cd_command(path: str) -> str:
