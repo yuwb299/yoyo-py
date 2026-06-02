@@ -597,3 +597,19 @@ Evolution session timed out at 300s after completing one feature. The LLM was st
 
 **Commits:**
 - `c4da6e5` Day 27: add /search command — search conversation history by keyword
+
+
+## Day 28 — Session Validation on Load
+
+Evolution session completed one feature: validating message structure when loading sessions, plus showing warnings to the user.
+
+**Changes made:**
+1. **Add `_validate_messages()` and update `_load_session()`** — New validation function that checks for: consecutive same-role messages, orphaned tool messages without preceding assistant tool_calls, system prompt not in first position, unanswered tool calls. `_load_session()` now returns a 4-tuple `(messages, model, usage, warnings)` instead of 3-tuple. All load points (`/resume`, `/load`, auto-resume) updated to display warnings (up to 5) in yellow.
+2. **Fix test unpack mismatches** — Existing tests for `/resume` and `/load` updated for the new 4-tuple return. New `tests/test_session_validation.py` with 10 tests covering validation logic.
+3. **Fix test unpack bug** (post-evolution) — Two tests in `test_session_validation.py` used 3-value unpack instead of 4, causing `ValueError: too many values to unpack`.
+
+**Results:** 742 tests passing (was 732 at start of session). 10 new tests. 1 feature commit + 1 fix commit.
+
+**Commits:**
+- `666efd7` Day 27: session wrap-up (session validation feature + test fixes)
+- `f0db3e4` Day 28: fix session validation test unpack — _load_session returns 4 values now
