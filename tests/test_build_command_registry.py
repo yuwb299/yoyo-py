@@ -26,6 +26,7 @@ def mock_provider():
     provider.max_tokens = None
     provider.temperature = 0.7
     provider.top_p = None
+    provider.reasoning_effort = None
     provider._provider_name = "test"
     return provider
 

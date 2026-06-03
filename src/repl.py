@@ -2551,6 +2551,7 @@ def _format_status_output(
     usage: Any,
     skills_count: int,
     context_tokens: int = 0,
+    reasoning_effort: str | None = None,
 ) -> str:
     """Format session status information.
 
@@ -2584,6 +2585,8 @@ def _format_status_output(
         f"  context:  {budget_str}",
         f"  skills:   {skills_count}",
     ]
+    if reasoning_effort:
+        lines.append(f"  thinking: {reasoning_effort}")
     return "\n".join(lines)
 
 
@@ -3045,6 +3048,7 @@ def _build_command_registry(
                 usage=agent.state.usage,
                 skills_count=skills.count(),
                 context_tokens=context_tokens,
+                reasoning_effort=provider.reasoning_effort,
             ) + "\n"
         )
 
@@ -3107,6 +3111,25 @@ def _build_command_registry(
         for key, value in updates.items():
             setattr(provider, key, value)
         return CommandResult(output=output + "\n")
+
+    @registry.register("think")
+    def _cmd_think(line: str, ctx: dict) -> CommandResult:
+        # /think — control reasoning depth for models that support extended thinking
+        effort = line[6:].strip().lower() if len(line) > 6 else ""
+        valid_efforts = {"low", "medium", "high"}
+        if effort == "off":
+            provider.reasoning_effort = None
+            return CommandResult(output=f"{DIM}  Reasoning effort: off (use API default){RESET}\n")
+        if effort == "" or effort == "show":
+            current = provider.reasoning_effort or "default"
+            return CommandResult(output=f"{DIM}  Reasoning effort: {current}{RESET}\n")
+        if effort not in valid_efforts:
+            return CommandResult(
+                output=f"{YELLOW}Usage: /think [low|medium|high|off]{RESET}\n"
+                f"{DIM}  Current: {provider.reasoning_effort or 'default'}{RESET}\n"
+            )
+        provider.reasoning_effort = effort
+        return CommandResult(output=f"{GREEN}  ✓ Reasoning effort set to {effort}{RESET}\n")
 
     @registry.register("list-providers")
     def _cmd_list_providers(line: str, ctx: dict) -> CommandResult:
@@ -3302,6 +3325,7 @@ def _print_help() -> None:
 
   {BOLD}Config:{RESET}
     {CYAN}/config{RESET}         View/set generation parameters (temperature, max_tokens, top_p)
+    {CYAN}/think [level]{RESET}  Set reasoning effort (low/medium/high/off)
     {CYAN}/list-providers{RESET}  List available provider presets
 
   {BOLD}Persistence:{RESET}

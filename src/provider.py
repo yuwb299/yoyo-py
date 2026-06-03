@@ -218,6 +218,10 @@ class GLMProvider:
         self.temperature = temperature if temperature is not None else _env_float("GLM_TEMPERATURE")
         self.top_p = top_p if top_p is not None else _env_float("GLM_TOP_P")
 
+        # Reasoning effort: controls extended thinking depth for models that support it
+        # Valid values: None (use API default), "low", "medium", "high"
+        self.reasoning_effort: str | None = None
+
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.base_url,
@@ -251,6 +255,8 @@ class GLMProvider:
             kwargs["temperature"] = self.temperature
         if self.top_p is not None:
             kwargs["top_p"] = self.top_p
+        if self.reasoning_effort is not None:
+            kwargs["reasoning_effort"] = self.reasoning_effort
 
         last_error: APIError | None = None
         for attempt in range(self.MAX_RETRIES):
@@ -309,6 +315,7 @@ class FailoverProvider:
         self.max_tokens = providers[0].max_tokens
         self.temperature = providers[0].temperature
         self.top_p = providers[0].top_p
+        self.reasoning_effort = providers[0].reasoning_effort
 
     def chat(
         self,
@@ -324,6 +331,8 @@ class FailoverProvider:
 
         for i, provider in enumerate(self.providers):
             try:
+                # Propagate reasoning effort to each underlying provider
+                provider.reasoning_effort = self.reasoning_effort
                 result = provider.chat(messages=messages, tools=tools, stream=stream)
                 # Update the active model reference
                 self.model = provider.model
