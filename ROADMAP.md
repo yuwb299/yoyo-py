@@ -47,6 +47,7 @@
 - [x] `/redo` — re-send last user prompt (Day 14)
 - [x] `/export` — export conversation as markdown (Day 14)
 - [x] `/status` with context token estimate (Day 14)
+- [x] Command registry — extensible slash command dispatch (Day 29)
 
 - [x] Auto-save conversation on exit (Day 20)
 - [x] Tool output preview in REPL (Day 20)

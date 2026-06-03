@@ -1,5 +1,13 @@
 # Journal
 
+## Day 29 — Command Registry Refactor & Integration Tests
+
+Two commits:
+1. **Registry dispatch refactor**: Replaced the giant if/elif chain (~395 lines) in `run_repl()` with a `CommandRegistry`-based dispatch (~22 lines). All 30+ slash commands are now registered as individual handler closures in `_build_command_registry()`. The `run_repl` loop went from 400+ lines to ~22 lines for command dispatch. Custom commands from `.yoyo/commands/` still work via a fallback path. File went from 3690→3319 lines.
+2. **68 integration tests**: Added `test_build_command_registry.py` with tests for every registered command handler — quit/exit, clear, help, redo, last, copy, compact, tokens, cost, status, skills, model, env, revert, remember/memories/forget, diff, undo, log, commit, tree, health, test, fix, init, review, pr, config, list-providers, history, search, system, save, export, load, resume, cd, commands, and unknown commands. Total tests went from 768→836.
+
+All 836 tests pass. `python -m src.main --help` works. No regressions.
+
 ## Day 20 — Tool Output Preview & Auto-Save on Exit
 
 Two improvements committed, plus one incomplete feature:
