@@ -366,6 +366,9 @@ async def run_repl(
         await _run_agent_turn(agent, initial_prompt)
         return
 
+    # Build command registry — all slash commands in one place
+    registry = _build_command_registry(agent, provider, skills)
+
     # Interactive loop
     while True:
         try:
@@ -381,401 +384,27 @@ async def run_repl(
         if not line:
             continue
 
-        # Handle slash commands
+        # Handle slash commands via the command registry
         if line.startswith("/"):
-            cmd = line.lower()
-            if cmd in ("/quit", "/exit"):
-                # Auto-save on exit to prevent data loss
-                _auto_save_on_exit(agent.state.messages, provider.model, usage=agent.state.usage)
-                _save_readline_history()
-                print(f"\n{DIM}  bye 👋{RESET}\n")
-                break
-            elif cmd == "/clear":
-                agent.clear()
-                print(f"{DIM}  (conversation cleared){RESET}\n")
+            result = registry.dispatch(line, {})
+            if result is not None:
+                if result.output:
+                    print(result.output, end="")
+                if result.done:
+                    break
+                if result.agent_prompt:
+                    await _run_agent_turn(agent, result.agent_prompt)
                 continue
-            elif cmd == "/redo":
-                last_msg = _find_last_user_message(agent.state.messages)
-                if last_msg is None:
-                    print(f"{DIM}  No previous message to redo{RESET}\n")
-                    continue
-                print(f"{DIM}  Redoing: {last_msg[:100]}{'...' if len(last_msg) > 100 else ''}{RESET}")
-                await _run_agent_turn(agent, last_msg)
-                continue
-            elif cmd == "/revert" or cmd.startswith("/revert "):
-                # Revert: remove last N conversation exchanges from history
-                revert_args = line[7:].strip() if len(line) > 7 else ""
-                try:
-                    count = int(revert_args) if revert_args else 1
-                except ValueError:
-                    print(f"{YELLOW}Usage: /revert [N] — remove last N exchanges (default 1){RESET}\n")
-                    continue
-                if count < 1:
-                    print(f"{YELLOW}Count must be at least 1{RESET}\n")
-                    continue
-                result = _handle_revert_command(agent.state.messages, count=count)
-                if isinstance(result, str):
-                    print(f"{DIM}  {result}{RESET}\n")
-                else:
-                    new_messages, removed = result
-                    agent.state.messages = new_messages
-                    print(f"{GREEN}  ✓ Reverted {removed} message(s) (/{count} exchange{'s' if count > 1 else ''}){RESET}\n")
-                continue
-            elif cmd == "/last":
-                last_response = _find_last_assistant_response(agent.state.messages)
-                if last_response is None:
-                    print(f"{DIM}  No previous response to show{RESET}\n")
-                else:
-                    print(_strip_interrupted_marker(last_response) + "\n")
-                continue
-            elif cmd == "/copy":
-                last_response = _find_last_assistant_response(agent.state.messages)
-                if last_response is None:
-                    print(f"{DIM}  No previous response to copy{RESET}\n")
-                else:
-                    clean = _strip_interrupted_marker(last_response)
-                    if _copy_to_clipboard(clean):
-                        print(f"{GREEN}  ✓ Copied last response to clipboard{RESET}\n")
-                    else:
-                        print(f"{YELLOW}  ⚠ Could not copy to clipboard — no clipboard tool available{RESET}\n")
-                continue
-            elif cmd == "/resume":
-                result = _handle_resume_command()
-                if isinstance(result, str):
-                    print(f"{DIM}  {result}{RESET}\n")
-                else:
-                    messages, model, usage, warnings = result
-                    agent.state.messages = messages
-                    agent.state.usage = usage
-                    provider.model = model
-                    real_count = len([m for m in messages if m.get("role") != "system"])
-                    print(f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}")
-                    if warnings:
-                        print(f"{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}")
-                        for w in warnings[:5]:
-                            print(f"{YELLOW}    • {w}{RESET}")
-                    print()
-                continue
-            elif cmd == "/help":
-                _print_help()
-                continue
-            elif cmd.startswith("/model "):
-                # Parse model name and optional --keep flag
-                model_args = line[7:].strip()
-                keep_history = "--keep" in model_args
-                new_model = model_args.replace("--keep", "").strip()
-                if not new_model:
-                    print(f"{YELLOW}Usage: /model <name> [--keep]{RESET}\n")
-                    continue
-                provider.model = new_model
-                if keep_history:
-                    print(f"{DIM}  (switched to {new_model}, history preserved){RESET}\n")
-                else:
-                    agent.clear()
-                    print(f"{DIM}  (switched to {new_model}, conversation cleared){RESET}\n")
-                continue
-            elif cmd == "/skills":
-                if skills.is_empty():
-                    print(f"{DIM}  No skills loaded{RESET}")
-                else:
-                    for name, content in skills.all():
-                        print(f"  {CYAN}{name}{RESET}: {content[:80]}...")
-                print()
-                continue
-            elif cmd == "/compact":
-                old_count = len(agent.state.messages)
-                old_tokens = Agent._estimate_tokens(agent.state.messages)
-                agent.state.messages = Agent._compact_messages(agent.state.messages)
-                new_count = len(agent.state.messages)
-                new_tokens = Agent._estimate_tokens(agent.state.messages)
-                print(f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){RESET}\n")
-                continue
-            elif cmd == "/undo":
-                print(_git_undo())
-                print()
-                continue
-            elif cmd == "/cd" or cmd.startswith("/cd "):
-                target = line[3:].strip() if len(line) > 3 else ""
-                result = _handle_cd_command(target)
-                print(result)
-                if result.startswith("[OK]"):
-                    # Update system prompt's cwd reference so agent knows new directory
-                    _update_system_prompt_cwd(agent.state.messages)
-                print()
-                continue
-            elif cmd == "/tree":
-                print(_project_tree())
-                print()
-                continue
-            elif cmd == "/tokens":
-                print(f"{DIM}  {agent.state.usage}{RESET}\n")
-                continue
-            elif cmd == "/system":
-                # View the current system prompt — useful for debugging context
-                print(_format_system_prompt_display(agent.state.messages))
-                print()
-                continue
-            elif cmd == "/config" or cmd.startswith("/config "):
-                # View or set generation parameters at runtime
-                config_args = line[7:].strip() if len(line) > 7 else ""
-                output, updates = _handle_config_command(
-                    args_str=config_args,
-                    temperature=provider.temperature,
-                    max_tokens=provider.max_tokens,
-                    top_p=provider.top_p,
-                    model=provider.model,
-                )
-                # Apply updates to provider
-                for key, value in updates.items():
-                    setattr(provider, key, value)
-                print(output)
-                print()
-                continue
-            elif cmd == "/history" or cmd.startswith("/history "):
-                # Use original line (not lowercase cmd) to preserve --tokens flag
-                show_tokens = "--tokens" in line
-                print(_format_history(agent.state.messages, show_tokens=show_tokens))
-                print()
-                continue
-            elif cmd == "/search" or cmd.startswith("/search "):
-                # Search conversation history by keyword
-                search_args = line[7:].strip() if len(line) > 7 else ""
-                if not search_args:
-                    print(f"{YELLOW}Usage: /search <keyword> [--case]{RESET}")
-                    print()
-                    continue
-                case_sensitive = "--case" in search_args
-                keyword = search_args.replace("--case", "").strip()
-                if not keyword:
-                    print(f"{YELLOW}Usage: /search <keyword> [--case]{RESET}")
-                    print()
-                    continue
-                print(_search_conversation(
-                    agent.state.messages,
-                    keyword,
-                    case_sensitive=case_sensitive,
-                ))
-                print()
-                continue
-            elif cmd == "/cost":
-                print(_estimate_cost(agent.state.usage, model=provider.model))
-                print()
-                continue
-            elif cmd == "/status":
-                from .agent import Agent as _Agent
-                context_tokens = _Agent._estimate_tokens(agent.state.messages)
-                print(_format_status_output(
-                    model=provider.model,
-                    cwd=os.getcwd(),
-                    messages=agent.state.messages,
-                    usage=agent.state.usage,
-                    skills_count=skills.count(),
-                    context_tokens=context_tokens,
-                ))
-                print()
-                continue
-            elif cmd == "/list-providers":
-                print(_format_providers_list(active_model=provider.model))
-                print()
-                continue
-            elif cmd == "/env":
-                print(_show_env_info(
-                    model=provider.model,
-                    base_url=provider.base_url,
-                    provider=getattr(provider, '_provider_name', None),
-                    api_key=provider.api_key,
-                    max_tokens=provider.max_tokens,
-                    temperature=provider.temperature,
-                    top_p=provider.top_p,
-                ))
-                print()
-                continue
-            elif cmd == "/diff":
-                print(_git_diff_summary())
-                print()
-                continue
-            elif cmd == "/log" or cmd.startswith("/log "):
-                # /log, /log N, /log --oneline, /log N --oneline
-                log_args = line[4:].strip() if len(line) > 4 else ""
-                count = 10
-                oneline = False
-                if log_args:
-                    parts = log_args.split()
-                    for part in parts:
-                        if part == "--oneline":
-                            oneline = True
-                        else:
-                            try:
-                                count = max(1, min(int(part), 100))
-                            except ValueError:
-                                print(f"{YELLOW}Usage: /log [N] [--oneline]{RESET}\n")
-                                break
-                    else:
-                        print(_run_git_log(count=count, oneline=oneline))
-                    print()
-                    continue
-                print(_run_git_log(count=count, oneline=oneline))
-                print()
-                continue
-            elif cmd == "/health":
-                print(_run_health_check())
-                print()
-                continue
-            elif cmd == "/test":
-                print(_run_test_command())
-                print()
-                continue
-            elif cmd == "/fix":
-                print(_run_fix_command())
-                print()
-                continue
-            elif cmd == "/review" or cmd.startswith("/review "):
-                # Consolidated /review handler — parses flags from original input
-                args_str = line[7:].strip() if len(line) > 7 else ""
-                if "--commit" in args_str:
-                    review_result = _run_review(commit=True)
-                elif "--staged" in args_str:
-                    review_result = _run_review(staged=True)
-                elif args_str:
-                    # Unknown flag
-                    print(f"{YELLOW}Usage: /review [--commit | --staged]{RESET}")
-                    print()
-                    continue
-                else:
-                    # Bare /review — review working tree changes
-                    review_result = _run_review()
-                if review_result.startswith("["):
-                    # Error/status message — just display it
-                    print(review_result)
-                else:
-                    # Actual review prompt — send to agent
-                    await _run_agent_turn(agent, review_result)
-                print()
-                continue
-            elif cmd == "/pr":
-                # Generate PR description from current changes
-                pr_result = _run_pr_description()
-                if pr_result.startswith("["):
-                    # Error/status message — just display it
-                    print(pr_result)
-                else:
-                    # PR description prompt — send to agent
-                    await _run_agent_turn(agent, pr_result)
-                print()
-                continue
-            elif cmd == "/init" or cmd.startswith("/init "):
-                force = "--force" in cmd
-                print(_run_init_command(force=force))
-                print()
-                continue
-            elif cmd == "/commit" or cmd.startswith("/commit "):
-                # Extract everything after "/commit " as the message
-                msg = line[7:].strip() if len(line) > 7 else ""
-                if not msg:
-                    print(f"{YELLOW}Usage: /commit <message>{RESET}\n")
-                    continue
-                print(_git_commit(msg))
-                print()
-                continue
-            elif cmd == "/save" or cmd.startswith("/save "):
-                # Save session to a file
-                save_path = line[5:].strip() if len(line) > 5 else ""
-                if not save_path:
-                    # Default save location
-                    save_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
-                print(_save_session(save_path, agent.state.messages, provider.model, usage=agent.state.usage))
-                print()
-                continue
-            elif cmd == "/export" or cmd.startswith("/export "):
-                # Export conversation as markdown
-                export_path = line[7:].strip() if len(line) > 7 else ""
-                include_system = "--system" in export_path
-                # Remove --system flag from path
-                export_path = export_path.replace("--system", "").strip()
-                if not export_path:
-                    export_path = os.path.join(os.getcwd(), "conversation.md")
-                print(_export_to_file(
-                    export_path,
-                    agent.state.messages,
-                    provider.model,
-                    include_system=include_system,
-                ))
-                print()
-                continue
-            elif cmd == "/load" or cmd.startswith("/load "):
-                # Load session from a file
-                load_path = line[5:].strip() if len(line) > 5 else ""
-                if not load_path:
-                    load_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
-                result = _load_session(load_path)
-                if result is None:
-                    print(f"{RED}  Failed to load session from {load_path}{RESET}")
-                    print(f"{DIM}  File may not exist or be invalid{RESET}\n")
-                    continue
-                messages, model, usage, warnings = result
-                agent.state.messages = messages
-                agent.state.usage = usage
-                provider.model = model
-                msg_count = len([m for m in messages if m.get("role") != "system"])
-                print(f"{GREEN}  Session loaded from {load_path}{RESET}")
-                print(f"{DIM}  {msg_count} messages, model: {model}{RESET}")
-                if warnings:
-                    print(f"{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}")
-                    for w in warnings[:5]:
-                        print(f"{YELLOW}    • {w}{RESET}")
-                print()
-                continue
-            elif cmd == "/remember" or cmd.startswith("/remember "):
-                # Remember a project fact
-                text = line[9:].strip() if len(line) > 9 else ""
-                if not text:
-                    print(f"{YELLOW}Usage: /remember <text>{RESET}\n")
-                    continue
-                print(_add_memory(text))
-                print()
-                continue
-            elif cmd == "/memories":
-                print(_list_memories())
-                print()
-                continue
-            elif cmd == "/commands":
-                custom_cmds = _load_custom_commands()
-                if not custom_cmds:
-                    print(f"{DIM}  No custom commands found — create .yoyo/commands/*.md{RESET}")
-                else:
-                    print(f"{BOLD}  Custom Commands:{RESET}")
-                    for name, info in custom_cmds.items():
-                        desc = info.get("description", "")
-                        if desc:
-                            print(f"    {CYAN}/{name}{RESET} — {desc}")
-                        else:
-                            print(f"    {CYAN}/{name}{RESET}")
-                print()
-                continue
-            elif cmd == "/forget" or cmd.startswith("/forget "):
-                # Forget a memory by ID
-                mem_id_str = line[7:].strip() if len(line) > 7 else ""
-                if not mem_id_str:
-                    print(f"{YELLOW}Usage: /forget <id>{RESET}\n")
-                    continue
-                try:
-                    mem_id = int(mem_id_str)
-                except ValueError:
-                    print(f"{RED}  ID must be a number{RESET}\n")
-                    continue
-                print(_forget_memory(mem_id))
-                print()
-                continue
+
+            # Fallback: check custom commands from .yoyo/commands/
+            custom_name = line[1:].split()[0]
+            custom_args = line[1 + len(custom_name):].strip()
+            resolved = _resolve_custom_command(custom_name, args=custom_args)
+            if resolved is not None:
+                await _run_agent_turn(agent, resolved)
             else:
-                # Check custom commands from .yoyo/commands/
-                custom_name = line[1:].split()[0]  # Remove / and take first word
-                custom_args = line[1 + len(custom_name):].strip()  # Rest is args
-                resolved = _resolve_custom_command(custom_name, args=custom_args)
-                if resolved is not None:
-                    await _run_agent_turn(agent, resolved)
-                else:
-                    print(f"{DIM}  Unknown command: {line}{RESET}\n")
-                continue
+                print(f"{DIM}  Unknown command: {line}{RESET}\n")
+            continue
 
         # Run agent turn
         await _run_agent_turn(agent, line)
@@ -3247,6 +2876,387 @@ def _format_system_prompt_display(messages: list[dict]) -> str:
         lines.append(system_content)
 
     return "\n".join(lines)
+
+
+def _build_command_registry(
+    agent: Agent,
+    provider: GLMProvider,
+    skills: SkillSet,
+) -> CommandRegistry:
+    """Build a CommandRegistry with all slash command handlers.
+
+    Each handler receives the raw input line and a ctx dict (currently empty,
+    reserved for future use). Handlers are closures that capture agent,
+    provider, and skills from the REPL scope.
+
+    Commands that need to trigger an agent turn return CommandResult with
+    agent_prompt set — the REPL loop handles the async call.
+    """
+    registry = CommandRegistry()
+
+    # ── Session commands ──────────────────────────────────────────
+
+    @registry.register("quit", aliases=["exit"])
+    def _cmd_quit(line: str, ctx: dict) -> CommandResult:
+        _auto_save_on_exit(agent.state.messages, provider.model, usage=agent.state.usage)
+        _save_readline_history()
+        return CommandResult(output=f"\n{DIM}  bye 👋{RESET}\n", done=True)
+
+    @registry.register("clear")
+    def _cmd_clear(line: str, ctx: dict) -> CommandResult:
+        agent.clear()
+        return CommandResult(output=f"{DIM}  (conversation cleared){RESET}\n")
+
+    @registry.register("help")
+    def _cmd_help(line: str, ctx: dict) -> CommandResult:
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            _print_help()
+        return CommandResult(output=buf.getvalue())
+
+    @registry.register("redo")
+    def _cmd_redo(line: str, ctx: dict) -> CommandResult:
+        last_msg = _find_last_user_message(agent.state.messages)
+        if last_msg is None:
+            return CommandResult(output=f"{DIM}  No previous message to redo{RESET}\n")
+        preview = last_msg[:100] + ("..." if len(last_msg) > 100 else "")
+        print(f"{DIM}  Redoing: {preview}{RESET}")
+        return CommandResult(output="", agent_prompt=last_msg)
+
+    @registry.register("last")
+    def _cmd_last(line: str, ctx: dict) -> CommandResult:
+        last_response = _find_last_assistant_response(agent.state.messages)
+        if last_response is None:
+            return CommandResult(output=f"{DIM}  No previous response to show{RESET}\n")
+        return CommandResult(output=_strip_interrupted_marker(last_response) + "\n")
+
+    @registry.register("copy")
+    def _cmd_copy(line: str, ctx: dict) -> CommandResult:
+        last_response = _find_last_assistant_response(agent.state.messages)
+        if last_response is None:
+            return CommandResult(output=f"{DIM}  No previous response to copy{RESET}\n")
+        clean = _strip_interrupted_marker(last_response)
+        if _copy_to_clipboard(clean):
+            return CommandResult(output=f"{GREEN}  ✓ Copied last response to clipboard{RESET}\n")
+        return CommandResult(output=f"{YELLOW}  ⚠ Could not copy to clipboard — no clipboard tool available{RESET}\n")
+
+    @registry.register("compact")
+    def _cmd_compact(line: str, ctx: dict) -> CommandResult:
+        old_count = len(agent.state.messages)
+        old_tokens = Agent._estimate_tokens(agent.state.messages)
+        agent.state.messages = Agent._compact_messages(agent.state.messages)
+        new_count = len(agent.state.messages)
+        new_tokens = Agent._estimate_tokens(agent.state.messages)
+        return CommandResult(
+            output=f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){RESET}\n"
+        )
+
+    # ── Git commands ──────────────────────────────────────────────
+
+    @registry.register("diff")
+    def _cmd_diff(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_git_diff_summary() + "\n")
+
+    @registry.register("undo")
+    def _cmd_undo(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_git_undo() + "\n")
+
+    @registry.register("log")
+    def _cmd_log(line: str, ctx: dict) -> CommandResult:
+        log_args = line[4:].strip() if len(line) > 4 else ""
+        count = 10
+        oneline = False
+        if log_args:
+            parts = log_args.split()
+            for part in parts:
+                if part == "--oneline":
+                    oneline = True
+                else:
+                    try:
+                        count = max(1, min(int(part), 100))
+                    except ValueError:
+                        return CommandResult(output=f"{YELLOW}Usage: /log [N] [--oneline]{RESET}\n")
+        return CommandResult(output=_run_git_log(count=count, oneline=oneline) + "\n")
+
+    @registry.register("commit")
+    def _cmd_commit(line: str, ctx: dict) -> CommandResult:
+        msg = line[7:].strip() if len(line) > 7 else ""
+        if not msg:
+            return CommandResult(output=f"{YELLOW}Usage: /commit <message>{RESET}\n")
+        return CommandResult(output=_git_commit(msg) + "\n")
+
+    @registry.register("review")
+    def _cmd_review(line: str, ctx: dict) -> CommandResult:
+        args_str = line[7:].strip() if len(line) > 7 else ""
+        if "--commit" in args_str:
+            review_result = _run_review(commit=True)
+        elif "--staged" in args_str:
+            review_result = _run_review(staged=True)
+        elif args_str:
+            return CommandResult(output=f"{YELLOW}Usage: /review [--commit | --staged]{RESET}\n")
+        else:
+            review_result = _run_review()
+        if review_result.startswith("["):
+            return CommandResult(output=review_result + "\n")
+        return CommandResult(output="", agent_prompt=review_result)
+
+    @registry.register("pr")
+    def _cmd_pr(line: str, ctx: dict) -> CommandResult:
+        pr_result = _run_pr_description()
+        if pr_result.startswith("["):
+            return CommandResult(output=pr_result + "\n")
+        return CommandResult(output="", agent_prompt=pr_result)
+
+    # ── Project commands ──────────────────────────────────────────
+
+    @registry.register("tree")
+    def _cmd_tree(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_project_tree() + "\n")
+
+    @registry.register("health")
+    def _cmd_health(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_run_health_check() + "\n")
+
+    @registry.register("test")
+    def _cmd_test(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_run_test_command() + "\n")
+
+    @registry.register("fix")
+    def _cmd_fix(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_run_fix_command() + "\n")
+
+    @registry.register("init")
+    def _cmd_init(line: str, ctx: dict) -> CommandResult:
+        force = "--force" in line.lower()
+        return CommandResult(output=_run_init_command(force=force) + "\n")
+
+    # ── Session info commands ─────────────────────────────────────
+
+    @registry.register("status")
+    def _cmd_status(line: str, ctx: dict) -> CommandResult:
+        context_tokens = Agent._estimate_tokens(agent.state.messages)
+        return CommandResult(
+            output=_format_status_output(
+                model=provider.model,
+                cwd=os.getcwd(),
+                messages=agent.state.messages,
+                usage=agent.state.usage,
+                skills_count=skills.count(),
+                context_tokens=context_tokens,
+            ) + "\n"
+        )
+
+    @registry.register("tokens")
+    def _cmd_tokens(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=f"{DIM}  {agent.state.usage}{RESET}\n")
+
+    @registry.register("cost")
+    def _cmd_cost(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_estimate_cost(agent.state.usage, model=provider.model) + "\n")
+
+    @registry.register("history")
+    def _cmd_history(line: str, ctx: dict) -> CommandResult:
+        show_tokens = "--tokens" in line
+        return CommandResult(output=_format_history(agent.state.messages, show_tokens=show_tokens) + "\n")
+
+    @registry.register("search")
+    def _cmd_search(line: str, ctx: dict) -> CommandResult:
+        search_args = line[7:].strip() if len(line) > 7 else ""
+        if not search_args:
+            return CommandResult(output=f"{YELLOW}Usage: /search <keyword> [--case]{RESET}\n")
+        case_sensitive = "--case" in search_args
+        keyword = search_args.replace("--case", "").strip()
+        if not keyword:
+            return CommandResult(output=f"{YELLOW}Usage: /search <keyword> [--case]{RESET}\n")
+        return CommandResult(
+            output=_search_conversation(agent.state.messages, keyword, case_sensitive=case_sensitive) + "\n"
+        )
+
+    @registry.register("system")
+    def _cmd_system(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_format_system_prompt_display(agent.state.messages) + "\n")
+
+    @registry.register("env")
+    def _cmd_env(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(
+            output=_show_env_info(
+                model=provider.model,
+                base_url=provider.base_url,
+                provider=getattr(provider, '_provider_name', None),
+                api_key=provider.api_key,
+                max_tokens=provider.max_tokens,
+                temperature=provider.temperature,
+                top_p=provider.top_p,
+            ) + "\n"
+        )
+
+    # ── Config commands ───────────────────────────────────────────
+
+    @registry.register("config")
+    def _cmd_config(line: str, ctx: dict) -> CommandResult:
+        config_args = line[7:].strip() if len(line) > 7 else ""
+        output, updates = _handle_config_command(
+            args_str=config_args,
+            temperature=provider.temperature,
+            max_tokens=provider.max_tokens,
+            top_p=provider.top_p,
+            model=provider.model,
+        )
+        for key, value in updates.items():
+            setattr(provider, key, value)
+        return CommandResult(output=output + "\n")
+
+    @registry.register("list-providers")
+    def _cmd_list_providers(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_format_providers_list(active_model=provider.model) + "\n")
+
+    # ── Persistence commands ──────────────────────────────────────
+
+    @registry.register("save")
+    def _cmd_save(line: str, ctx: dict) -> CommandResult:
+        save_path = line[5:].strip() if len(line) > 5 else ""
+        if not save_path:
+            save_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
+        return CommandResult(output=_save_session(save_path, agent.state.messages, provider.model, usage=agent.state.usage) + "\n")
+
+    @registry.register("export")
+    def _cmd_export(line: str, ctx: dict) -> CommandResult:
+        export_path = line[7:].strip() if len(line) > 7 else ""
+        include_system = "--system" in export_path
+        export_path = export_path.replace("--system", "").strip()
+        if not export_path:
+            export_path = os.path.join(os.getcwd(), "conversation.md")
+        return CommandResult(
+            output=_export_to_file(export_path, agent.state.messages, provider.model, include_system=include_system) + "\n"
+        )
+
+    @registry.register("load")
+    def _cmd_load(line: str, ctx: dict) -> CommandResult:
+        load_path = line[5:].strip() if len(line) > 5 else ""
+        if not load_path:
+            load_path = os.path.join(os.getcwd(), ".yoyo", "session.json")
+        result = _load_session(load_path)
+        if result is None:
+            return CommandResult(output=f"{RED}  Failed to load session from {load_path}{RESET}\n{DIM}  File may not exist or be invalid{RESET}\n")
+        messages, model, usage, warnings = result
+        agent.state.messages = messages
+        agent.state.usage = usage
+        provider.model = model
+        msg_count = len([m for m in messages if m.get("role") != "system"])
+        output = f"{GREEN}  Session loaded from {load_path}{RESET}\n{DIM}  {msg_count} messages, model: {model}{RESET}"
+        if warnings:
+            output += f"\n{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}"
+            for w in warnings[:5]:
+                output += f"\n{YELLOW}    • {w}{RESET}"
+        return CommandResult(output=output + "\n")
+
+    @registry.register("resume")
+    def _cmd_resume(line: str, ctx: dict) -> CommandResult:
+        result = _handle_resume_command()
+        if isinstance(result, str):
+            return CommandResult(output=f"{DIM}  {result}{RESET}\n")
+        messages, model, usage, warnings = result
+        agent.state.messages = messages
+        agent.state.usage = usage
+        provider.model = model
+        real_count = len([m for m in messages if m.get("role") != "system"])
+        output = f"{GREEN}  ✓ Resumed session ({real_count} messages, model: {model}){RESET}"
+        if warnings:
+            output += f"\n{YELLOW}  ⚠ Session has {len(warnings)} issue(s):{RESET}"
+            for w in warnings[:5]:
+                output += f"\n{YELLOW}    • {w}{RESET}"
+        return CommandResult(output=output + "\n")
+
+    @registry.register("remember")
+    def _cmd_remember(line: str, ctx: dict) -> CommandResult:
+        text = line[9:].strip() if len(line) > 9 else ""
+        if not text:
+            return CommandResult(output=f"{YELLOW}Usage: /remember <text>{RESET}\n")
+        return CommandResult(output=_add_memory(text) + "\n")
+
+    @registry.register("memories")
+    def _cmd_memories(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_list_memories() + "\n")
+
+    @registry.register("forget")
+    def _cmd_forget(line: str, ctx: dict) -> CommandResult:
+        mem_id_str = line[7:].strip() if len(line) > 7 else ""
+        if not mem_id_str:
+            return CommandResult(output=f"{YELLOW}Usage: /forget <id>{RESET}\n")
+        try:
+            mem_id = int(mem_id_str)
+        except ValueError:
+            return CommandResult(output=f"{RED}  ID must be a number{RESET}\n")
+        return CommandResult(output=_forget_memory(mem_id) + "\n")
+
+    @registry.register("skills")
+    def _cmd_skills(line: str, ctx: dict) -> CommandResult:
+        if skills.is_empty():
+            return CommandResult(output=f"{DIM}  No skills loaded{RESET}\n")
+        lines = []
+        for name, content in skills.all():
+            lines.append(f"  {CYAN}{name}{RESET}: {content[:80]}...")
+        return CommandResult(output="\n".join(lines) + "\n")
+
+    @registry.register("commands")
+    def _cmd_commands(line: str, ctx: dict) -> CommandResult:
+        custom_cmds = _load_custom_commands()
+        if not custom_cmds:
+            return CommandResult(output=f"{DIM}  No custom commands found — create .yoyo/commands/*.md{RESET}\n")
+        lines = [f"{BOLD}  Custom Commands:{RESET}"]
+        for name, info in custom_cmds.items():
+            desc = info.get("description", "")
+            if desc:
+                lines.append(f"    {CYAN}/{name}{RESET} — {desc}")
+            else:
+                lines.append(f"    {CYAN}/{name}{RESET}")
+        return CommandResult(output="\n".join(lines) + "\n")
+
+    # ── Model/cd/revert — commands that mutate REPL state ─────────
+
+    @registry.register("model")
+    def _cmd_model(line: str, ctx: dict) -> CommandResult:
+        model_args = line[6:].strip()
+        keep_history = "--keep" in model_args
+        new_model = model_args.replace("--keep", "").strip()
+        if not new_model:
+            return CommandResult(output=f"{YELLOW}Usage: /model <name> [--keep]{RESET}\n")
+        provider.model = new_model
+        if keep_history:
+            return CommandResult(output=f"{DIM}  (switched to {new_model}, history preserved){RESET}\n")
+        else:
+            agent.clear()
+            return CommandResult(output=f"{DIM}  (switched to {new_model}, conversation cleared){RESET}\n")
+
+    @registry.register("cd")
+    def _cmd_cd(line: str, ctx: dict) -> CommandResult:
+        target = line[3:].strip() if len(line) > 3 else ""
+        result = _handle_cd_command(target)
+        if result.startswith("[OK]"):
+            _update_system_prompt_cwd(agent.state.messages)
+        return CommandResult(output=result + "\n")
+
+    @registry.register("revert")
+    def _cmd_revert(line: str, ctx: dict) -> CommandResult:
+        revert_args = line[7:].strip() if len(line) > 7 else ""
+        try:
+            count = int(revert_args) if revert_args else 1
+        except ValueError:
+            return CommandResult(output=f"{YELLOW}Usage: /revert [N] — remove last N exchanges (default 1){RESET}\n")
+        if count < 1:
+            return CommandResult(output=f"{YELLOW}Count must be at least 1{RESET}\n")
+        result = _handle_revert_command(agent.state.messages, count=count)
+        if isinstance(result, str):
+            return CommandResult(output=f"{DIM}  {result}{RESET}\n")
+        new_messages, removed = result
+        agent.state.messages = new_messages
+        return CommandResult(
+            output=f"{GREEN}  ✓ Reverted {removed} message(s) (/{count} exchange{'s' if count > 1 else ''}){RESET}\n"
+        )
+
+    return registry
 
 
 def _print_help() -> None:
