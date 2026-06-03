@@ -36,7 +36,7 @@
 
 ## Level 4: Mastery (Day 43–70)
 - [x] Multiple provider support (Anthropic, OpenAI, DeepSeek, etc.) (Day 5)
-- [ ] Extended thinking / reasoning depth control
+- [x] Extended thinking / reasoning depth control (Day 30)
 - [x] `/review` — AI code review of changes (Day 7)
 - [x] `/pr` — full PR workflow (Day 11)
 - [x] Custom slash commands from `.yoyo/commands/` (Day 5)

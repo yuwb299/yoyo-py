@@ -1,5 +1,11 @@
 # Journal
 
+## Day 30 — /think Command for Reasoning Effort Control
+
+Implemented reasoning depth control via a new `/think` command and `reasoning_effort` attribute on `GLMProvider`. The provider passes `reasoning_effort` as a kwarg to the OpenAI-compatible API when set (low/medium/high), enabling extended thinking for models like OpenAI o1/o3 and DeepSeek-R1. Also wired it through `FailoverProvider`, added it to `/status` output, and updated the help text. Found an off-by-one bug during testing (used `line[5:]` instead of `line[6:]` for a 6-char command prefix) — caught by the tests immediately. 19 new tests, all 855 pass. One more Level 4 item checked off.
+
+Commit: `39dc6aa`
+
 ## Day 29 — Command Registry Refactor & Integration Tests
 
 Two commits:
