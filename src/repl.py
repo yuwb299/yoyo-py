@@ -37,7 +37,7 @@ _HISTORY_MAX = 500
 # All slash commands for tab completion
 _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
-    "/resume", "/compact", "/cd", "/model",
+    "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
     "/tree", "/init", "/health", "/test", "/fix",
     "/status", "/tokens", "/cost", "/history", "/search", "/system", "/env",
@@ -300,6 +300,25 @@ async def run_repl(
                     continue
                 print(f"{DIM}  Redoing: {last_msg[:100]}{'...' if len(last_msg) > 100 else ''}{RESET}")
                 await _run_agent_turn(agent, last_msg)
+                continue
+            elif cmd == "/revert" or cmd.startswith("/revert "):
+                # Revert: remove last N conversation exchanges from history
+                revert_args = line[7:].strip() if len(line) > 7 else ""
+                try:
+                    count = int(revert_args) if revert_args else 1
+                except ValueError:
+                    print(f"{YELLOW}Usage: /revert [N] — remove last N exchanges (default 1){RESET}\n")
+                    continue
+                if count < 1:
+                    print(f"{YELLOW}Count must be at least 1{RESET}\n")
+                    continue
+                result = _handle_revert_command(agent.state.messages, count=count)
+                if isinstance(result, str):
+                    print(f"{DIM}  {result}{RESET}\n")
+                else:
+                    new_messages, removed = result
+                    agent.state.messages = new_messages
+                    print(f"{GREEN}  ✓ Reverted {removed} message(s) (/{count} exchange{'s' if count > 1 else ''}){RESET}\n")
                 continue
             elif cmd == "/last":
                 last_response = _find_last_assistant_response(agent.state.messages)
@@ -2990,6 +3009,56 @@ def _find_last_user_message(messages: list[dict]) -> str | None:
     return None
 
 
+def _handle_revert_command(messages: list[dict], count: int = 1) -> tuple[list[dict], int] | str:
+    """Remove the last N conversation exchanges from message history.
+
+    An "exchange" is a user message followed by the assistant's response(s),
+    including any tool call chains (assistant → tool → assistant → ...).
+
+    Always preserves the system prompt (index 0). If count exceeds available
+    exchanges, removes all non-system messages.
+
+    Args:
+        messages: The conversation message list.
+        count: Number of exchanges to revert (default 1).
+
+    Returns:
+        Tuple of (new_messages, removed_count) on success,
+        or a string message if nothing to revert.
+    """
+    if count < 1:
+        return "Reverted 0 exchanges"
+
+    # Only consider non-system messages
+    real_msgs = [m for m in messages if m.get("role") != "system"]
+    if not real_msgs:
+        return "No conversation to revert"
+
+    # Walk backwards to identify exchange boundaries.
+    # An exchange starts with a user message and includes everything after it
+    # until the next user message (or end of conversation).
+    # We identify exchanges by finding user messages from the end.
+    exchanges_found = 0
+    cut_index = len(messages)  # Where to cut (keep messages[:cut_index])
+
+    for i in range(len(messages) - 1, -1, -1):
+        role = messages[i].get("role")
+        if role == "system":
+            break
+        if role == "user":
+            exchanges_found += 1
+            cut_index = i
+            if exchanges_found >= count:
+                break
+
+    if exchanges_found == 0:
+        return "No conversation to revert"
+
+    removed = len(messages) - cut_index
+    new_messages = messages[:cut_index]
+    return (new_messages, removed)
+
+
 def _find_last_assistant_response(messages: list[dict]) -> str | None:
     """Find the last meaningful assistant text response in the conversation.
 
@@ -3077,6 +3146,7 @@ def _print_help() -> None:
     {CYAN}/help{RESET}           Show this help
     {CYAN}/clear{RESET}          Clear conversation history
     {CYAN}/redo{RESET}           Re-send the last user prompt
+    {CYAN}/revert [N]{RESET}      Remove last N exchanges from history (default 1)
     {CYAN}/last{RESET}           Redisplay the last assistant response
     {CYAN}/copy{RESET}           Copy last response to clipboard
     {CYAN}/resume{RESET}         Resume last auto-saved session
