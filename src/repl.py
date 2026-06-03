@@ -359,10 +359,19 @@ async def run_repl(
                 _print_help()
                 continue
             elif cmd.startswith("/model "):
-                new_model = line[7:].strip()
+                # Parse model name and optional --keep flag
+                model_args = line[7:].strip()
+                keep_history = "--keep" in model_args
+                new_model = model_args.replace("--keep", "").strip()
+                if not new_model:
+                    print(f"{YELLOW}Usage: /model <name> [--keep]{RESET}\n")
+                    continue
                 provider.model = new_model
-                agent.clear()
-                print(f"{DIM}  (switched to {new_model}, conversation cleared){RESET}\n")
+                if keep_history:
+                    print(f"{DIM}  (switched to {new_model}, history preserved){RESET}\n")
+                else:
+                    agent.clear()
+                    print(f"{DIM}  (switched to {new_model}, conversation cleared){RESET}\n")
                 continue
             elif cmd == "/skills":
                 if skills.is_empty():
@@ -3152,7 +3161,7 @@ def _print_help() -> None:
     {CYAN}/resume{RESET}         Resume last auto-saved session
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/cd [path]{RESET}      Change working directory (default: home)
-    {CYAN}/model <name>{RESET}   Switch model (clears history)
+    {CYAN}/model <name>{RESET}   Switch model (clears history, use --keep to preserve)
 
   {BOLD}Git:{RESET}
     {CYAN}/diff{RESET}           Show git diff summary
