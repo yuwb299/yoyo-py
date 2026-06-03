@@ -613,3 +613,18 @@ Evolution session completed one feature: validating message structure when loadi
 **Commits:**
 - `666efd7` Day 27: session wrap-up (session validation feature + test fixes)
 - `f0db3e4` Day 28: fix session validation test unpack — _load_session returns 4 values now
+
+
+## Day 28 — /revert Command and /model --keep Flag
+
+Evolution session completed two features before hitting the max tool rounds limit (50). Build and tests passing.
+
+**Changes made:**
+1. **Add /revert command** (`f9ea528`) — New `/revert [N]` command that removes the last N exchanges from conversation history (default 1). Shows what was removed (role and preview of each message). Prevents reverting past the system prompt. Added to help text and REPL dispatch. 12 tests in `tests/test_revert_command.py`.
+2. **Add --keep flag to /model command** (`8f4ec99`) — New `/model <name> --keep` flag that switches the model without clearing conversation history. Without the flag, `/model` continues to clear history (existing behavior). 7 tests in `tests/test_model_keep.py`.
+
+**Results:** 754 tests passing (was 742 at start of session). 12 new tests for /revert + 7 new tests for /model --keep. 2 feature commits.
+
+**Commits:**
+- `f9ea528` Day 28: add /revert command to undo conversation exchanges
+- `8f4ec99` Day 28: add --keep flag to /model command to preserve history on switch
