@@ -29,6 +29,107 @@ RED = "\x1b[31m"
 MAGENTA = "\x1b[35m"
 
 
+# ── Command Registry ──────────────────────────────────────────────────
+# A lightweight registry that maps slash command names to handler functions.
+# Each handler receives the raw input line and a context dict, and returns
+# a CommandResult. This replaces the giant if/elif chain in run_repl().
+
+from dataclasses import dataclass, field as dc_field
+
+
+@dataclass
+class CommandResult:
+    """Result from a slash command handler.
+
+    Attributes:
+        output: Text to display to the user. Printed before returning to the REPL loop.
+        agent_prompt: If set, this text is sent to the agent as a prompt after displaying output.
+                      Used by commands like /review, /pr that need the LLM to process results.
+        done: If True, the REPL should exit after this command (e.g. /quit, /exit).
+    """
+    output: str = ""
+    agent_prompt: str | None = None
+    done: bool = False
+
+
+class CommandRegistry:
+    """Registry mapping slash command names to handler functions.
+
+    Usage:
+        registry = CommandRegistry()
+
+        @registry.register("hello")
+        def handle_hello(line: str, ctx: dict) -> CommandResult:
+            return CommandResult(output="Hello!")
+
+        result = registry.dispatch("/hello", ctx)
+    """
+
+    def __init__(self) -> None:
+        self._handlers: dict[str, Callable[[str, dict], CommandResult]] = {}
+
+    def register(
+        self,
+        name: str,
+        aliases: list[str] | None = None,
+    ) -> Callable:
+        """Decorator to register a command handler.
+
+        Args:
+            name: Primary command name (without /).
+            aliases: Alternative names that dispatch to the same handler.
+        """
+        def decorator(fn: Callable[[str, dict], CommandResult]) -> Callable[[str, dict], CommandResult]:
+            self._handlers[name] = fn
+            if aliases:
+                for alias in aliases:
+                    self._handlers[alias] = fn
+            return fn
+        return decorator
+
+    def dispatch(self, line: str, ctx: dict) -> CommandResult | None:
+        """Dispatch a slash command line to the registered handler.
+
+        Matches by extracting the command name from the line (first word after /),
+        then calling the registered handler with the full line and context.
+
+        Args:
+            line: The raw input line (e.g. "/commit fix bug").
+            ctx: Context dict with agent state (messages, model, etc.).
+
+        Returns:
+            CommandResult if a handler was found, None if no handler matched.
+        """
+        if not line.startswith("/"):
+            return None
+
+        # Extract command name: first word after /
+        parts = line[1:].split(None, 1)
+        cmd_name = parts[0].lower() if parts else ""
+
+        handler = self._handlers.get(cmd_name)
+        if handler is None:
+            return None
+
+        return handler(line, ctx)
+
+    def list_commands(self) -> list[str]:
+        """Return sorted list of registered command names."""
+        return sorted(self._handlers.keys())
+
+
+def command_handler(
+    registry: CommandRegistry,
+    name: str,
+    aliases: list[str] | None = None,
+) -> Callable:
+    """Standalone decorator version for module-level registration.
+
+    Same as registry.register() but usable without the @ syntax sugar.
+    """
+    return registry.register(name, aliases=aliases)
+
+
 # ── Readline support: history + tab completion ────────────────────────
 
 _HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".yoyo_history")

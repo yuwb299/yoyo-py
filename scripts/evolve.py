@@ -16,7 +16,7 @@ Environment:
     GLM_API_KEY   — required
     REPO          — GitHub repo (optional, for issue fetching)
     MODEL         — LLM model (default: from env or glm-5.1)
-    TIMEOUT       — Max session time in seconds (default: 600)
+    TIMEOUT       — Max session time in seconds (default: 900)
 """
 
 from __future__ import annotations
@@ -220,7 +220,7 @@ async def run_evolution_session(provider: GLMProvider, prompt: str, timeout: int
         system_prompt=system_prompt,
         tools=TOOL_FUNCTIONS,
         tool_schemas=TOOL_SCHEMAS,
-        max_tool_rounds=50,
+        max_tool_rounds=80,
     )
 
     # Run the agent
@@ -325,7 +325,7 @@ def main() -> None:
     day = get_day_count()
     date = datetime.now().strftime("%Y-%m-%d")
     model = os.getenv("MODEL", os.getenv("GLM_MODEL", "glm-5.1"))
-    timeout = int(os.getenv("TIMEOUT", "600"))
+    timeout = int(os.getenv("TIMEOUT", "900"))
 
     print(f"\n  Day {day}: {date}")
     print(f"  Model: {model}")

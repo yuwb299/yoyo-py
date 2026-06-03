@@ -35,7 +35,7 @@ class AgentState:
     messages: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     max_tool_rounds: int = 20  # Safety: max tool-calling rounds per prompt
-    compact_threshold: int = 100000  # Token estimate threshold for auto-compact
+    compact_threshold: int = 80000  # Token estimate threshold for auto-compact
 
 
 class Agent:
