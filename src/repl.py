@@ -1368,6 +1368,15 @@ def _run_health_check(workdir: str | None = None) -> str:
     # Detect Node project
     is_node = (p / "package.json").exists()
 
+    # Detect Rust project
+    is_rust = (p / "Cargo.toml").exists()
+
+    # Detect Go project
+    is_go = (p / "go.mod").exists()
+
+    # Detect Java/Maven project
+    is_java = (p / "pom.xml").exists()
+
     if is_python:
         project_types.append("Python")
         # Run pytest
@@ -1408,6 +1417,54 @@ def _run_health_check(workdir: str | None = None) -> str:
         if "not found" not in output and "missing script" not in output.lower():
             status = f"{GREEN}✓{RESET}" if ok else f"{YELLOW}⚠{RESET}"
             results.append(f"  {status} npm lint: {'clean' if ok else 'issues found'}")
+
+    if is_rust:
+        project_types.append("Rust")
+        # Run cargo test
+        ok, output = _run(["cargo", "test", "--quiet"], "cargo test")
+        status = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+        results.append(f"  {status} cargo test: {'pass' if ok else 'fail'}")
+        if not ok and output:
+            for line in output.splitlines()[:5]:
+                results.append(f"      {line}")
+
+        # Run cargo check (faster than build, catches compile errors)
+        ok, output = _run(["cargo", "check", "--quiet"], "cargo check")
+        if "not found" not in output:
+            status = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+            results.append(f"  {status} cargo check: {'ok' if ok else 'compile errors'}")
+
+        # Run clippy if available
+        ok, output = _run(["cargo", "clippy", "--quiet"], "clippy")
+        if "not found" not in output:
+            status = f"{GREEN}✓{RESET}" if ok else f"{YELLOW}⚠{RESET}"
+            results.append(f"  {status} clippy: {'clean' if ok else 'warnings/issues'}")
+
+    if is_go:
+        project_types.append("Go")
+        # Run go test
+        ok, output = _run(["go", "test", "./..."], "go test")
+        status = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+        results.append(f"  {status} go test: {'pass' if ok else 'fail'}")
+        if not ok and output:
+            for line in output.splitlines()[:5]:
+                results.append(f"      {line}")
+
+        # Run go vet
+        ok, output = _run(["go", "vet", "./..."], "go vet")
+        if "not found" not in output:
+            status = f"{GREEN}✓{RESET}" if ok else f"{YELLOW}⚠{RESET}"
+            results.append(f"  {status} go vet: {'clean' if ok else 'issues found'}")
+
+    if is_java:
+        project_types.append("Java")
+        # Run Maven test
+        ok, output = _run(["mvn", "test", "-q"], "mvn test")
+        status = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
+        results.append(f"  {status} mvn test: {'pass' if ok else 'fail'}")
+        if not ok and output:
+            for line in output.splitlines()[:5]:
+                results.append(f"      {line}")
 
     if not project_types:
         results.append(f"  {DIM}No recognized project type found{RESET}")
@@ -1463,6 +1520,15 @@ def _run_test_command(workdir: str | None = None) -> str:
     # Detect Node project
     is_node = (p / "package.json").exists()
 
+    # Detect Rust project
+    is_rust = (p / "Cargo.toml").exists()
+
+    # Detect Go project
+    is_go = (p / "go.mod").exists()
+
+    # Detect Java/Maven project
+    is_java = (p / "pom.xml").exists()
+
     if is_python:
         try:
             result = subprocess.run(
@@ -1504,6 +1570,68 @@ def _run_test_command(workdir: str | None = None) -> str:
 
         except FileNotFoundError:
             return f"{YELLOW}npm not found — install Node.js{RESET}"
+        except subprocess.TimeoutExpired:
+            return f"{RED}✗ Tests timed out (120s){RESET}"
+
+    elif is_rust:
+        try:
+            result = subprocess.run(
+                ["cargo", "test", "--quiet"],
+                capture_output=True, text=True, timeout=120, cwd=cwd,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+
+            if result.returncode == 0:
+                lines = output.splitlines()
+                summary = lines[-3:] if len(lines) > 3 else lines
+                return f"{GREEN}✓ Rust tests passed{RESET}\n" + "\n".join(summary)
+            else:
+                lines = output.splitlines()
+                summary = lines[-5:] if len(lines) > 5 else lines
+                return f"{RED}✗ Rust tests failed{RESET}\n" + "\n".join(summary)
+
+        except FileNotFoundError:
+            return f"{YELLOW}cargo not found — install Rust (https://rustup.rs){RESET}"
+        except subprocess.TimeoutExpired:
+            return f"{RED}✗ Tests timed out (120s){RESET}"
+
+    elif is_go:
+        try:
+            result = subprocess.run(
+                ["go", "test", "./..."],
+                capture_output=True, text=True, timeout=120, cwd=cwd,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+            lines = output.splitlines()
+            summary = lines[-5:] if len(lines) > 5 else lines
+
+            if result.returncode == 0:
+                return f"{GREEN}✓ Go tests passed{RESET}\n" + "\n".join(summary)
+            else:
+                return f"{RED}✗ Go tests failed{RESET}\n" + "\n".join(summary)
+
+        except FileNotFoundError:
+            return f"{YELLOW}go not found — install Go (https://go.dev/dl){RESET}"
+        except subprocess.TimeoutExpired:
+            return f"{RED}✗ Tests timed out (120s){RESET}"
+
+    elif is_java:
+        try:
+            result = subprocess.run(
+                ["mvn", "test", "-q"],
+                capture_output=True, text=True, timeout=120, cwd=cwd,
+            )
+            output = result.stdout.strip() or result.stderr.strip()
+            lines = output.splitlines()
+            summary = lines[-5:] if len(lines) > 5 else lines
+
+            if result.returncode == 0:
+                return f"{GREEN}✓ Java tests passed (Maven){RESET}\n" + "\n".join(summary)
+            else:
+                return f"{RED}✗ Java tests failed (Maven){RESET}\n" + "\n".join(summary)
+
+        except FileNotFoundError:
+            return f"{YELLOW}mvn not found — install Maven (https://maven.apache.org){RESET}"
         except subprocess.TimeoutExpired:
             return f"{RED}✗ Tests timed out (120s){RESET}"
 
