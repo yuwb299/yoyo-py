@@ -89,6 +89,12 @@ def parse_args() -> argparse.Namespace:
         version=f"%(prog)s {__version__}",
     )
     parser.add_argument(
+        "--think",
+        default=None,
+        choices=["low", "medium", "high"],
+        help="Set reasoning effort at startup (low/medium/high)",
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         help="Resume last auto-saved session on startup",
@@ -130,6 +136,9 @@ def main() -> None:
             temperature=args.temperature,
             top_p=args.top_p,
         )
+        # Set reasoning effort from CLI flag
+        if args.think:
+            provider.reasoning_effort = args.think
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         print("Set the appropriate API key in .env or environment.", file=sys.stderr)

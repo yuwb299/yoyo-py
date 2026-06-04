@@ -142,7 +142,7 @@ _SLASH_COMMANDS = sorted([
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
     "/tree", "/init", "/health", "/test", "/fix",
     "/status", "/tokens", "/cost", "/history", "/search", "/system", "/env",
-    "/config", "/list-providers",
+    "/config", "/list-providers", "/think",
     "/save", "/load", "/export", "/remember", "/memories", "/forget",
     "/skills", "/commands",
 ])
