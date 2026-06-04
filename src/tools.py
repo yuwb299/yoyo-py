@@ -204,21 +204,33 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
         return f"[ERROR] {e}"
 
 
-def tool_search(pattern: str, path: str = ".", file_glob: str | None = None, max_results: int = 50) -> str:
-    """Search file contents with regex, or find files by name pattern.
+def tool_search(
+    pattern: str,
+    path: str = ".",
+    file_glob: str | None = None,
+    max_results: int = 50,
+    context: int = 0,
+) -> str:
+    """Search file contents with regex pattern. Returns matching lines with file paths and line numbers.
 
     Args:
-        pattern: Regex pattern to search for in file contents, or glob like '*.py' to find by name.
+        pattern: Regex pattern to search for.
         path: Directory to search in (default: current).
         file_glob: Optional file filter (e.g. '*.py').
         max_results: Max results to return (default 50).
+        context: Number of context lines before and after each match (default 0, like grep -C).
 
     Returns:
         Matching lines with file paths and line numbers.
     """
+    # Clamp context to non-negative
+    context = max(context, 0)
+
     try:
         # Build ripgrep command
         cmd = ["rg", "--line-number", "--max-count", str(max_results)]
+        if context > 0:
+            cmd.extend(["--context", str(context)])
         if file_glob:
             cmd.extend(["--glob", file_glob])
         cmd.extend([pattern, path])
@@ -243,7 +255,10 @@ def tool_search(pattern: str, path: str = ".", file_glob: str | None = None, max
 
     except FileNotFoundError:
         # Fallback to grep if rg not installed
-        cmd = ["grep", "-rn", "-E", pattern]
+        cmd = ["grep", "-rn", "-E"]
+        if context > 0:
+            cmd.extend([f"-C{context}"])
+        cmd.append(pattern)
         if file_glob:
             cmd.extend(["--include", file_glob])
         cmd.extend([path])
@@ -560,6 +575,11 @@ TOOL_SCHEMAS = [
                         "type": "integer",
                         "description": "Max results to return (default 50).",
                         "default": 50,
+                    },
+                    "context": {
+                        "type": "integer",
+                        "description": "Number of context lines before and after each match (default 0, like grep -C).",
+                        "default": 0,
                     },
                 },
                 "required": ["pattern"],
