@@ -642,3 +642,20 @@ Evolution session completed two features before hitting the max tool rounds limi
 **Commits:**
 - `f9ea528` Day 28: add /revert command to undo conversation exchanges
 - `8f4ec99` Day 28: add --keep flag to /model command to preserve history on switch
+
+## Day 31 — Multi-Language Detection & Search Context
+
+Evolution session completed three features before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Add context parameter to search tool** (`51a37e4`) — New `context` parameter on the search tool that shows surrounding lines like `grep -C`. Displays N lines before and after each match for better code navigation. 161-line test file `tests/test_search_context.py`.
+2. **Add Rust/Go/Java detection to /health and /test commands** (`a4a1abf`) — Extended `/health` and `/test` slash commands to detect Rust (Cargo.toml), Go (go.mod), and Java (pom.xml / build.gradle) projects in addition to Python. Shows appropriate test runner commands for each language. 199-line test file `tests/test_rust_go_java_support.py`.
+3. **Add Rust/Go/Java detection to /init command and update tree ignore list** (`62b6319`) — Extended `/init` command to recognize Rust/Go/Java project structures and generate appropriate context. Updated the tree ignore list to exclude common non-essential directories for these languages (target/, build/, vendor/). 100-line test file `tests/test_init_rust_go_java.py`.
+
+**Results:** 891 tests passing (was 855 at start of session). 36 new tests. 3 feature commits.
+
+**Commits:**
+- `51a37e4` Day 31: add context parameter to search tool — show surrounding lines like grep -C
+- `a4a1abf` Day 31: add Rust, Go, Java detection to /health and /test commands
+- `62b6319` Day 31: add Rust/Go/Java detection to /init command and update tree ignore list
+- `484302f` Day 31: session wrap-up
