@@ -2856,18 +2856,27 @@ def _search_conversation(
         "tool": "🔧",
     }
 
+    # Validate regex first — fall back to literal search if invalid
+    try:
+        re.compile(keyword)
+        use_regex = True
+    except re.error:
+        # Treat keyword as literal string, escape special chars
+        keyword_safe = re.escape(keyword)
+        use_regex = False
+
     matches = []
     for i, msg in enumerate(messages):
         role = msg.get("role", "unknown")
         content = msg.get("content") or ""
 
-        if not re.search(keyword, content, flags):
+        pattern = keyword_safe if not use_regex else keyword
+        if not re.search(pattern, content, flags):
             continue
 
         icon = role_icons.get(role, "•")
-        # Show a preview with the match highlighted
         # Find the match position and show context around it
-        match = re.search(keyword, content, flags)
+        match = re.search(pattern, content, flags)
         if match:
             start = max(0, match.start() - 30)
             end = min(len(content), match.end() + 50)
