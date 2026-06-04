@@ -1665,6 +1665,9 @@ def _run_init_command(workdir: str | None = None, force: bool = False) -> str:
         or (p / "requirements.txt").exists()
     )
     is_node = (p / "package.json").exists()
+    is_rust = (p / "Cargo.toml").exists()
+    is_go = (p / "go.mod").exists()
+    is_java = (p / "pom.xml").exists()
 
     # Build project info
     project_name = p.name
@@ -1695,13 +1698,44 @@ def _run_init_command(workdir: str | None = None, force: bool = False) -> str:
             test_cmd = "npm test"
         project_details = f"- Language: {language}\n- Test: `npm test` (or `{test_cmd}`)\n"
 
+    elif is_rust:
+        language = "Rust"
+        test_cmd = "cargo test"
+        # Try to read project name from Cargo.toml
+        cargo = p / "Cargo.toml"
+        if cargo.exists():
+            content = cargo.read_text()
+            for line in content.splitlines():
+                if line.strip().startswith("name"):
+                    project_name = line.split("=", 1)[1].strip().strip("'\"")
+                    break
+        project_details = f"- Language: {language}\n- Test: `{test_cmd}`\n- Build: `cargo build`\n- Lint: `cargo clippy`\n"
+
+    elif is_go:
+        language = "Go"
+        test_cmd = "go test ./..."
+        # Read module name from go.mod
+        gomod = p / "go.mod"
+        if gomod.exists():
+            content = gomod.read_text()
+            for line in content.splitlines():
+                if line.startswith("module "):
+                    project_name = line.split(" ", 1)[1].strip()
+                    break
+        project_details = f"- Language: {language}\n- Test: `{test_cmd}`\n- Vet: `go vet ./...`\n"
+
+    elif is_java:
+        language = "Java (Maven)"
+        test_cmd = "mvn test"
+        project_details = f"- Language: {language}\n- Test: `{test_cmd}`\n- Build: `mvn package`\n"
+
     # Build directory tree (limited depth)
     def _build_tree(directory: Path, prefix: str = "", depth: int = 0, max_depth: int = 3) -> list[str]:
         if depth > max_depth:
             return [f"{prefix}..."]
         entries = sorted(directory.iterdir(), key=lambda e: (not e.is_dir(), e.name))
         # Skip hidden and common ignored dirs
-        skip = {".git", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".mypy_cache", ".tox", "dist", "build", ".eggs", ".next"}
+        skip = {".git", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".mypy_cache", ".tox", "dist", "build", ".eggs", ".next", "target", "vendor"}
         lines = []
         for entry in entries:
             if entry.name.startswith(".") and entry.name not in {".env", ".github"}:
