@@ -141,7 +141,7 @@ _SLASH_COMMANDS = sorted([
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
     "/tree", "/init", "/health", "/test", "/fix",
-    "/status", "/tokens", "/cost", "/history", "/search", "/system", "/env",
+    "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/think",
     "/save", "/load", "/export", "/remember", "/memories", "/forget",
     "/skills", "/commands",
@@ -2896,6 +2896,118 @@ def _search_conversation(
     return header + "\n" + "\n".join(matches)
 
 
+def _run_grep(args: str) -> str:
+    """Quick file content search — like grep but as a slash command.
+
+    Usage: /grep <pattern> [--case] [--glob <pattern>]
+
+    Searches file contents recursively from the current working directory.
+    Supports regex patterns (falls back to literal if invalid regex).
+    Skips common ignored directories (.git, __pycache__, node_modules, etc.).
+
+    Args:
+        args: The search arguments — pattern and optional flags.
+
+    Returns:
+        Formatted search results with file paths and line numbers.
+    """
+    if not args.strip():
+        return f"{YELLOW}Usage: /grep <pattern> [--case] [--glob <pattern>]{RESET}"
+
+    # Parse flags
+    parts = args.split()
+    case_sensitive = "--case" in parts
+    glob_filter = None
+    if "--glob" in parts:
+        glob_idx = parts.index("--glob")
+        if glob_idx + 1 < len(parts):
+            glob_filter = parts[glob_idx + 1]
+            # Remove --glob and its value from parts
+            parts = parts[:glob_idx] + parts[glob_idx + 2:]
+
+    # Remove flags from parts to get the pattern
+    keywords = [p for p in parts if p not in ("--case", "--glob")]
+    if not keywords:
+        return f"{YELLOW}Usage: /grep <pattern> [--case] [--glob <pattern>]{RESET}"
+
+    pattern = " ".join(keywords)
+
+    # Validate regex — fall back to literal search if invalid
+    try:
+        re.compile(pattern)
+        use_regex = True
+    except re.error:
+        pattern = re.escape(pattern)
+        use_regex = False
+
+    flags = 0 if case_sensitive else re.IGNORECASE
+
+    # Directories to skip
+    skip_dirs = {
+        ".git", "__pycache__", "node_modules", ".venv", ".pytest_cache",
+        ".mypy_cache", ".tox", "dist", "build", ".eggs", ".next", "target",
+        "vendor", ".hg", ".svn",
+    }
+
+    # Binary check — files with null bytes
+    def _is_binary_file(path: Path) -> bool:
+        try:
+            chunk = path.read_bytes()[:8192]
+            return b"\x00" in chunk
+        except Exception:
+            return True
+
+    results = []
+    cwd = Path(os.getcwd())
+    max_results = 50
+
+    for root, dirs, files in os.walk(cwd):
+        # Skip ignored directories
+        dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
+
+        for fname in sorted(files):
+            if len(results) >= max_results:
+                break
+
+            fpath = Path(root) / fname
+
+            # Apply glob filter
+            if glob_filter:
+                import fnmatch
+                if not fnmatch.fnmatch(fname, glob_filter):
+                    continue
+
+            # Skip binary files
+            if _is_binary_file(fpath):
+                continue
+
+            try:
+                lines = fpath.read_text(errors="replace").splitlines()
+            except Exception:
+                continue
+
+            rel_path = fpath.relative_to(cwd)
+            for line_num, line in enumerate(lines, 1):
+                if len(results) >= max_results:
+                    break
+                if re.search(pattern, line, flags):
+                    # Truncate long lines
+                    display_line = line.strip()
+                    if len(display_line) > 120:
+                        display_line = display_line[:117] + "..."
+                    results.append(f"{DIM}{rel_path}{RESET}:{GREEN}{line_num}{RESET}:{display_line}")
+
+    if not results:
+        return f"{DIM}No matches found for '{pattern}'{RESET}"
+
+    truncated = ""
+    if len(results) >= max_results:
+        truncated = f"\n{DIM}  ... (truncated at {max_results} results){RESET}"
+
+    header = f"{BOLD}Grep Results{RESET} ({len(results)} match{'es' if len(results) != 1 else ''} for '{pattern}')"
+    return header + "\n" + "\n".join(results) + truncated
+
+
 def _find_last_user_message(messages: list[dict]) -> str | None:
     """Find the last real user message (not a compact summary) in the conversation.
 
@@ -3250,6 +3362,11 @@ def _build_command_registry(
             output=_search_conversation(agent.state.messages, keyword, case_sensitive=case_sensitive) + "\n"
         )
 
+    @registry.register("grep")
+    def _cmd_grep(line: str, ctx: dict) -> CommandResult:
+        grep_args = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_grep(grep_args) + "\n")
+
     @registry.register("system")
     def _cmd_system(line: str, ctx: dict) -> CommandResult:
         return CommandResult(output=_format_system_prompt_display(agent.state.messages) + "\n")
@@ -3492,6 +3609,7 @@ def _print_help() -> None:
     {CYAN}/cost{RESET}           Estimate API cost from token usage
     {CYAN}/history{RESET}        Show conversation history (--tokens for estimates)
     {CYAN}/search <keyword>{RESET} Search conversation history (--case for case-sensitive)
+    {CYAN}/grep <pattern>{RESET}  Search file contents (--case, --glob <pattern>)
     {CYAN}/system{RESET}         View current system prompt
     {CYAN}/env{RESET}            Show provider config (model, base URL, API key)
 
