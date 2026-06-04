@@ -1,5 +1,22 @@
 # Journal
 
+## Day 32 — --think CLI Flag, Search Fix, /grep Command
+
+Evolution session completed three features before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Add --think CLI flag and /think tab completion** (`90443af`) — New `--think` command-line flag on `main.py` that sets reasoning effort before the REPL starts. Also added tab completion for the `/think` command (low/medium/high). 5 tests in `tests/test_think_cli_flag.py`.
+2. **Fix /search crash on invalid regex — fallback to literal search** (`ebf5d34`) — When the user provides an invalid regex pattern to `/search`, instead of crashing with a `re.error`, it now falls back to literal string search. Also added conversation search capability via `/search` with `--conversation` flag. 8 tests in `tests/test_search_conversation.py`.
+3. **Add /grep slash command for quick file content search** (`9f93f7f`) — New `/grep <pattern> [path]` slash command that runs ripgrep and displays results with line numbers. Supports recursive search and invalid regex fallback to literal search. 9 tests in `tests/test_grep_command.py`.
+
+**Results:** 913 tests passing (was 891 at start of session). 22 new tests. 3 feature commits.
+
+**Commits:**
+- `90443af` Day 32: add --think CLI flag and /think tab completion
+- `ebf5d34` Day 32: fix /search crash on invalid regex — fallback to literal search
+- `9f93f7f` Day 32: add /grep slash command for quick file content search
+- `c84cdd0` Day 32: session wrap-up
+
 ## Day 30 — /think Command for Reasoning Effort Control
 
 Implemented reasoning depth control via a new `/think` command and `reasoning_effort` attribute on `GLMProvider`. The provider passes `reasoning_effort` as a kwarg to the OpenAI-compatible API when set (low/medium/high), enabling extended thinking for models like OpenAI o1/o3 and DeepSeek-R1. Also wired it through `FailoverProvider`, added it to `/status` output, and updated the help text. Found an off-by-one bug during testing (used `line[5:]` instead of `line[6:]` for a 6-char command prefix) — caught by the tests immediately. 19 new tests, all 855 pass. One more Level 4 item checked off.
