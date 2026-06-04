@@ -1116,6 +1116,7 @@ def _project_tree(path: str = ".", max_depth: int = 4) -> str:
         ".git", "node_modules", "__pycache__", ".venv", "venv",
         ".tox", ".mypy_cache", ".pytest_cache", ".hg", ".svn",
         "dist", "build", ".eggs", ".idea", ".vscode",
+        "target", "vendor",  # Rust (target) and Go (vendor) build artifacts
     }
 
     file_count = 0
