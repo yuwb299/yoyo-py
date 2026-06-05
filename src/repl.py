@@ -187,18 +187,112 @@ def _save_readline_history() -> None:
 
 
 def _slash_completer(text: str, state: int) -> str | None:
-    """Readline completer: suggests slash commands when input starts with /.
+    """Readline completer: suggests slash commands and file paths.
 
-    Returns the next matching completion, or None when exhausted.
-    This matches readline's completer protocol.
+    For commands that take file/directory arguments (cd, edit, load, save,
+    export), completes with matching filesystem entries. For other inputs
+    starting with /, completes slash command names.
     """
     if not text.startswith("/"):
         return None
 
+    # Commands that take path arguments — each maps to a filter function
+    _PATH_COMMANDS = {
+        "/cd ": _complete_dirs,
+        "/edit ": _complete_files,
+        "/load ": _complete_json_paths,
+        "/save ": _complete_json_paths,
+        "/export ": _complete_md_paths,
+    }
+
+    # Check if we should do path completion instead of command completion
+    for prefix, completer_fn in _PATH_COMMANDS.items():
+        if text.startswith(prefix):
+            matches = completer_fn(text[len(prefix):])
+            if state < len(matches):
+                return prefix + matches[state]
+            return None
+
+    # Default: slash command name completion
     matches = [cmd for cmd in _SLASH_COMMANDS if cmd.startswith(text)]
     if state < len(matches):
         return matches[state]
     return None
+
+
+def _complete_dirs(partial: str) -> list[str]:
+    """Return directory names matching the partial path."""
+    try:
+        cwd = os.getcwd()
+        if os.path.isabs(partial):
+            base_dir = os.path.dirname(partial) or "/"
+            prefix = os.path.basename(partial)
+        else:
+            base_dir = os.path.dirname(os.path.join(cwd, partial)) or cwd
+            prefix = os.path.basename(partial)
+
+        entries = []
+        for entry in os.listdir(base_dir):
+            full = os.path.join(base_dir, entry)
+            if os.path.isdir(full) and entry.startswith(prefix):
+                entries.append(entry)
+        return sorted(entries)
+    except Exception:
+        return []
+
+
+def _complete_files(partial: str) -> list[str]:
+    """Return file names matching the partial path."""
+    try:
+        cwd = os.getcwd()
+        if os.path.isabs(partial):
+            base_dir = os.path.dirname(partial) or "/"
+            prefix = os.path.basename(partial)
+        else:
+            base_dir = os.path.dirname(os.path.join(cwd, partial)) or cwd
+            prefix = os.path.basename(partial)
+
+        entries = []
+        for entry in os.listdir(base_dir):
+            full = os.path.join(base_dir, entry)
+            if os.path.isfile(full) and entry.startswith(prefix):
+                entries.append(entry)
+        return sorted(entries)
+    except Exception:
+        return []
+
+
+def _complete_json_paths(partial: str) -> list[str]:
+    """Return .json file and directory names matching the partial path."""
+    return _complete_by_ext(partial, ".json")
+
+
+def _complete_md_paths(partial: str) -> list[str]:
+    """Return .md file and directory names matching the partial path."""
+    return _complete_by_ext(partial, ".md")
+
+
+def _complete_by_ext(partial: str, ext: str) -> list[str]:
+    """Return entries matching the partial path with given extension or directories."""
+    try:
+        cwd = os.getcwd()
+        if os.path.isabs(partial):
+            base_dir = os.path.dirname(partial) or "/"
+            prefix = os.path.basename(partial)
+        else:
+            base_dir = os.path.dirname(os.path.join(cwd, partial)) or cwd
+            prefix = os.path.basename(partial)
+
+        entries = []
+        for entry in os.listdir(base_dir):
+            full = os.path.join(base_dir, entry)
+            if entry.startswith(prefix) and (
+                os.path.isdir(full) or entry.endswith(ext)
+            ):
+                entries.append(entry)
+        return sorted(entries)
+    except Exception:
+        return []
 
 
 def print_banner() -> None:
