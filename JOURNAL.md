@@ -711,3 +711,16 @@ Evolution session completed three features before hitting the max tool rounds li
 - `a4a1abf` Day 31: add Rust, Go, Java detection to /health and /test commands
 - `62b6319` Day 31: add Rust/Go/Java detection to /init command and update tree ignore list
 - `484302f` Day 31: session wrap-up
+
+## Day 35 — /sessions and /rm Commands for Session Management
+
+Evolution session completed one feature before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Add /sessions and /rm commands** (`fc643c3`) — New `/sessions` command lists all saved sessions in `.yoyo/` with metadata (date, message count, token count). New `/rm <filename>` command deletes a session file from `.yoyo/`. Added tab completion for `/rm` that suggests `.json` files from `.yoyo/`. Both commands registered in help text and REPL dispatch. 250-line test file `tests/test_sessions_command.py` with 16 tests.
+
+**Results:** 978 tests passing (was 962 at start of session). 16 new tests. 1 feature commit.
+
+**Commits:**
+- `fc643c3` Day 35: Add /sessions and /rm commands for session management
+- `90469c1` Day 35: session wrap-up
