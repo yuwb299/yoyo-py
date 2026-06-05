@@ -140,7 +140,7 @@ _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
-    "/tree", "/init", "/health", "/test", "/fix", "/edit",
+    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/think", "/version",
     "/save", "/load", "/export", "/remember", "/memories", "/forget",
@@ -1289,6 +1289,142 @@ def _project_tree(path: str = ".", max_depth: int = 4) -> str:
     tree_lines.append(f"\n{file_count} file(s), {dir_count} director(ies)")
 
     return "\n".join(tree_lines)
+
+
+# ── Language detection for /count ────────────────────────────────────
+
+# Extension → (language_name, category)
+# category: "code", "markup", "style", "data", "config"
+_LANG_MAP: dict[str, tuple[str, str]] = {
+    # Code
+    ".py": ("Python", "code"),
+    ".pyi": ("Python", "code"),
+    ".js": ("JavaScript", "code"),
+    ".jsx": ("JavaScript", "code"),
+    ".ts": ("TypeScript", "code"),
+    ".tsx": ("TypeScript", "code"),
+    ".rs": ("Rust", "code"),
+    ".go": ("Go", "code"),
+    ".java": ("Java", "code"),
+    ".kt": ("Kotlin", "code"),
+    ".c": ("C", "code"),
+    ".h": ("C/C++ Header", "code"),
+    ".cpp": ("C++", "code"),
+    ".cc": ("C++", "code"),
+    ".cxx": ("C++", "code"),
+    ".hpp": ("C++ Header", "code"),
+    ".cs": ("C#", "code"),
+    ".rb": ("Ruby", "code"),
+    ".php": ("PHP", "code"),
+    ".swift": ("Swift", "code"),
+    ".scala": ("Scala", "code"),
+    ".r": ("R", "code"),
+    ".R": ("R", "code"),
+    ".lua": ("Lua", "code"),
+    ".sh": ("Shell", "code"),
+    ".bash": ("Shell", "code"),
+    ".zsh": ("Shell", "code"),
+    ".sql": ("SQL", "code"),
+    # Markup / docs
+    ".md": ("Markdown", "markup"),
+    ".rst": ("reStructuredText", "markup"),
+    ".html": ("HTML", "markup"),
+    ".htm": ("HTML", "markup"),
+    ".xml": ("XML", "markup"),
+    ".yaml": ("YAML", "markup"),
+    ".yml": ("YAML", "markup"),
+    ".toml": ("TOML", "markup"),
+    # Style
+    ".css": ("CSS", "style"),
+    ".scss": ("SCSS", "style"),
+    ".less": ("Less", "style"),
+    # Data
+    ".json": ("JSON", "data"),
+    ".csv": ("CSV", "data"),
+    ".tsv": ("TSV", "data"),
+    # Config
+    ".ini": ("INI", "config"),
+    ".cfg": ("INI", "config"),
+    ".env": ("Env", "config"),
+}
+
+# Dirs to always skip during counting
+_SKIP_DIRS = {
+    ".git", "node_modules", "__pycache__", ".venv", "venv",
+    ".tox", ".mypy_cache", ".pytest_cache", ".hg", ".svn",
+    "dist", "build", ".eggs", ".idea", ".vscode",
+    "target", "vendor", ".next", ".nuxt", ".cache",
+    "coverage", ".coverage", "htmlcov", ".ruff_cache",
+}
+
+
+def _run_count_command(workdir: str | None = None) -> str:
+    """Count lines of code by language.
+
+    Walks the project tree (skipping noise dirs), identifies file types,
+    and reports line counts per language with a summary total.
+    """
+    cwd = workdir or os.getcwd()
+    p = Path(cwd)
+
+    if not p.exists():
+        return f"{RED}[ERROR] Directory not found: {cwd}{RESET}"
+    if not p.is_dir():
+        return f"{RED}[ERROR] Not a directory: {cwd}{RESET}"
+
+    # Collect stats: {lang: (file_count, line_count)}
+    lang_stats: dict[str, tuple[int, int]] = {}
+    other_files = 0
+    other_lines = 0
+
+    for root, dirs, files in os.walk(p):
+        # Skip noise directories
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith(".")]
+
+        for fname in files:
+            fpath = os.path.join(root, fname)
+            try:
+                line_count = sum(1 for _ in open(fpath, encoding="utf-8", errors="ignore"))
+            except (OSError, PermissionError):
+                continue
+
+            ext = os.path.splitext(fname)[1]
+            if ext in _LANG_MAP:
+                lang, _ = _LANG_MAP[ext]
+                fc, lc = lang_stats.get(lang, (0, 0))
+                lang_stats[lang] = (fc + 1, lc + line_count)
+            elif fname.startswith(".") or fname.endswith((".lock", ".map", ".min.js", ".min.css")):
+                # Skip lockfiles, source maps, minified files, dotfiles
+                continue
+            else:
+                other_files += 1
+                other_lines += line_count
+
+    if not lang_stats and other_files == 0:
+        return f"{DIM}No source files found{RESET}"
+
+    # Format output
+    lines = [f"{BOLD}Code Statistics{RESET}\n"]
+
+    # Sort by line count descending
+    sorted_langs = sorted(lang_stats.items(), key=lambda x: x[1][1], reverse=True)
+
+    total_files = 0
+    total_lines = 0
+
+    for lang, (fc, lc) in sorted_langs:
+        lines.append(f"  {CYAN}{lang:<20}{RESET} {fc:>4} file(s)  {lc:>6} lines")
+        total_files += fc
+        total_lines += lc
+
+    if other_files > 0:
+        lines.append(f"  {DIM}{'Other':<20} {other_files:>4} file(s)  {other_lines:>6} lines{RESET}")
+        total_files += other_files
+        total_lines += other_lines
+
+    lines.append(f"\n  {BOLD}Total:{RESET}  {total_files} file(s)  {total_lines} lines")
+
+    return "\n".join(lines)
 
 
 def _git_undo(workdir: str | None = None) -> str:
@@ -3472,6 +3608,10 @@ def _build_command_registry(
     def _cmd_tree(line: str, ctx: dict) -> CommandResult:
         return CommandResult(output=_project_tree() + "\n")
 
+    @registry.register("count")
+    def _cmd_count(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_run_count_command() + "\n")
+
     @registry.register("health")
     def _cmd_health(line: str, ctx: dict) -> CommandResult:
         return CommandResult(output=_run_health_check() + "\n")
@@ -3783,6 +3923,7 @@ def _print_help() -> None:
 
   {BOLD}Project:{RESET}
     {CYAN}/tree{RESET}           Show project directory structure
+    {CYAN}/count{RESET}          Count lines of code by language
     {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
     {CYAN}/edit <file>{RESET}    Open file in $EDITOR (default: vim)
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
