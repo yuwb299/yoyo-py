@@ -775,6 +775,45 @@ def _git_context() -> str:
     return "\n".join(lines)
 
 
+def _git_status_line() -> str | None:
+    """Return a one-line git status summary: branch + dirty/clean.
+
+    Returns None if not in a git repo.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "symbolic-ref", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            # Try detached HEAD
+            result = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if result.returncode != 0:
+                return None
+            branch = result.stdout.strip() + " (detached)"
+        else:
+            branch = result.stdout.strip()
+
+        # Check dirty status
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return branch
+
+        changed = len([l for l in result.stdout.strip().splitlines() if l.strip()])
+        if changed == 0:
+            return f"{branch} (clean)"
+        else:
+            return f"{branch} ({changed} changed)"
+    except Exception:
+        return None
+
+
 def _git_diff_summary() -> str:
     """Generate a summary of git changes (staged + unstaged).
 
@@ -2875,6 +2914,12 @@ def _format_status_output(
     ]
     if reasoning_effort:
         lines.append(f"  thinking: {reasoning_effort}")
+
+    # Add git branch + dirty status if in a git repo
+    git_info = _git_status_line()
+    if git_info:
+        lines.append(f"  git:      {git_info}")
+
     return "\n".join(lines)
 
 
