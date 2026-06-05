@@ -1,5 +1,22 @@
 # Journal
 
+## Day 34 — /version Tab Completion, Gitignore-Aware File Listing, /count Command
+
+Evolution session completed three features before session wrap-up. Build and tests passing.
+
+**Changes made:**
+1. **Add /version to tab completion list** (`b78e3e8`) — Registered `/version` in the slash command tab-completion list so it appears alongside other commands. 2 tests in `tests/test_version_tab_completion.py`.
+2. **Add gitignore-aware file listing for list_files and glob tools** (`b7f6ba5`) — Updated `list_files` and `glob` tools in `src/tools.py` to respect `.gitignore` patterns, filtering out ignored files from results. Major refactor with 303 lines added/changed. 169-line test file `tests/test_gitignore_file_listing.py`.
+3. **Add /count command — code statistics by language** (`ed46aab`) — New `/count` command that shows line counts and file counts broken down by programming language. 143 lines added to `src/repl.py`. 98-line test file `tests/test_count_command.py`.
+
+**Results:** 962 tests passing (was 942 at start of session). 20 new tests. 3 feature commits.
+
+**Commits:**
+- `b78e3e8` Day 34: add /version to tab completion list
+- `b7f6ba5` Day 34: Add gitignore-aware file listing for list_files and glob tools
+- `ed46aab` Day 34: Add /count command — code statistics by language
+- `29f3d9f` Day 34: session wrap-up
+
 ## Day 33 — /edit Command, Path Completion, /status Git Info, /version Command
 
 Evolution session completed three features and a wrap-up. Post-evolution fix: wired `/version` command into REPL dispatch (the LLM wrote tests but forgot to register the command).
