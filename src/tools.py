@@ -278,6 +278,9 @@ def tool_search(
 def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth: int | None = None) -> str:
     """List files in a directory.
 
+    When inside a git repo, respects .gitignore (excludes __pycache__, build
+    artifacts, node_modules, etc). Outside git repos, lists all files.
+
     Args:
         path: Directory to list (default: current).
         glob_pattern: Filter by glob pattern (e.g. '*.py').
@@ -293,26 +296,15 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
         if not p.is_dir():
             return f"[ERROR] Not a directory: {path}"
 
-        # Build find command for efficiency
-        cmd = ["find", path, "-type", "f"]
-        if max_depth:
-            cmd.extend(["-maxdepth", str(max_depth)])
-
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-
-        if result.returncode != 0:
-            # Fallback to os.walk
-            files = []
-            for root, dirs, filenames in os.walk(path):
-                if max_depth:
-                    depth = root.replace(str(p), "").count(os.sep)
-                    if depth >= max_depth:
-                        dirs.clear()
-                        continue
-                for f in filenames:
-                    files.append(os.path.join(root, f))
+        # Try git-aware listing first: uses .gitignore to filter out noise
+        # like __pycache__, node_modules, build artifacts, etc.
+        # This saves LLM context tokens on irrelevant files.
+        git_files = _git_list_files(p, max_depth=max_depth)
+        if git_files is not None:
+            files = git_files
         else:
-            files = result.stdout.strip().splitlines()
+            # Not a git repo — fall back to listing everything
+            files = _find_all_files(p, max_depth=max_depth)
 
         # Apply glob filter
         if glob_pattern:
@@ -353,6 +345,9 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
     finding files by name because it uses pathlib.glob directly instead
     of listing everything then filtering.
 
+    When inside a git repo, respects .gitignore (excludes __pycache__, build
+    artifacts, node_modules, etc).
+
     Args:
         pattern: Glob pattern (e.g. '**/*.py', '*.txt', 'src/**/test_*.py').
         path: Root directory to search in (default: current).
@@ -372,6 +367,13 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
         matches = sorted(p.glob(pattern))
         # Filter out directories — only return files
         matches = [m for m in matches if m.is_file()]
+
+        # Filter gitignored files when in a git repo — prevents wasting
+        # LLM context tokens on __pycache__, node_modules, etc.
+        git_ignored = _git_ignored_set(p)
+        if git_ignored is not None:
+            matches = [m for m in matches if str(m) not in git_ignored
+                       and not any(str(m).startswith(ignored + os.sep) for ignored in git_ignored)]
 
         total = len(matches)
         if total == 0:
@@ -441,6 +443,119 @@ def tool_rename(source: str, destination: str) -> str:
 
     except Exception as e:
         return f"[ERROR] {e}"
+
+
+# ─── Gitignore-aware helpers ─────────────────────────────────────────
+
+def _git_list_files(directory: Path, max_depth: int | None = None) -> list[str] | None:
+    """List files using git, respecting .gitignore.
+
+    Returns a list of absolute file paths, or None if not inside a git repo.
+    Uses `git ls-files` for tracked files + `git ls-files --others --exclude-standard`
+    for untracked-but-not-ignored files.
+    """
+    try:
+        # Quick check: are we inside a git repo?
+        check = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if check.returncode != 0:
+            return None
+
+        # Tracked files
+        cmd_tracked = ["git", "-C", str(directory), "ls-files", "-z"]
+        result_tracked = subprocess.run(cmd_tracked, capture_output=True, timeout=15)
+
+        # Untracked but not gitignored files
+        cmd_untracked = [
+            "git", "-C", str(directory), "ls-files",
+            "--others", "--exclude-standard", "-z",
+        ]
+        result_untracked = subprocess.run(cmd_untracked, capture_output=True, timeout=15)
+
+        # Parse null-separated output (-z flag for safe filename handling)
+        files = []
+        for result in (result_tracked, result_untracked):
+            if result.returncode == 0 and result.stdout:
+                for name in result.stdout.decode("utf-8", errors="replace").split("\0"):
+                    name = name.strip()
+                    if not name:
+                        continue
+                    full_path = os.path.join(str(directory), name)
+                    # Apply max_depth filter: depth = number of path separators relative to root
+                    if max_depth:
+                        depth = name.count(os.sep)
+                        if depth >= max_depth:
+                            continue
+                    files.append(full_path)
+
+        return files if files else []
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return None
+
+
+def _find_all_files(directory: Path, max_depth: int | None = None) -> list[str]:
+    """List all files using find command, with os.walk fallback.
+
+    Used when not inside a git repo (no .gitignore filtering).
+    """
+    cmd = ["find", str(directory), "-type", "f"]
+    if max_depth:
+        cmd.extend(["-maxdepth", str(max_depth)])
+
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+
+    if result.returncode != 0:
+        # Fallback to os.walk
+        files = []
+        for root, dirs, filenames in os.walk(directory):
+            if max_depth:
+                depth = root.replace(str(directory), "").count(os.sep)
+                if depth >= max_depth:
+                    dirs.clear()
+                    continue
+            for f in filenames:
+                files.append(os.path.join(root, f))
+        return files
+    else:
+        return result.stdout.strip().splitlines()
+
+
+def _git_ignored_set(directory: Path) -> set[str] | None:
+    """Return a set of gitignored file paths (absolute), or None if not a git repo.
+
+    Used by glob to filter out gitignored matches.
+    Returns None when not in a git repo (caller should skip filtering).
+    """
+    try:
+        check = subprocess.run(
+            ["git", "-C", str(directory), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if check.returncode != 0:
+            return None
+
+        # Get all files that git would ignore
+        # `git ls-files --others --ignored --exclude-standard` lists ignored files
+        result = subprocess.run(
+            ["git", "-C", str(directory), "ls-files",
+             "--others", "--ignored", "--exclude-standard", "-z"],
+            capture_output=True, timeout=15,
+        )
+        if result.returncode != 0 or not result.stdout:
+            return set()
+
+        ignored = set()
+        for name in result.stdout.decode("utf-8", errors="replace").split("\0"):
+            name = name.strip()
+            if name:
+                ignored.add(os.path.join(str(directory), name))
+        return ignored
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return None
 
 
 # ─── Tool schemas (OpenAI function calling format) ──────────────────
