@@ -143,7 +143,7 @@ _SLASH_COMMANDS = sorted([
     "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/think", "/version",
-    "/save", "/load", "/export", "/remember", "/memories", "/forget",
+    "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
     "/skills", "/commands",
 ])
 
@@ -203,6 +203,7 @@ def _slash_completer(text: str, state: int) -> str | None:
         "/load ": _complete_json_paths,
         "/save ": _complete_json_paths,
         "/export ": _complete_md_paths,
+        "/rm ": _complete_yoyo_sessions,
     }
 
     # Check if we should do path completion instead of command completion
@@ -289,6 +290,21 @@ def _complete_by_ext(partial: str, ext: str) -> list[str]:
             if entry.startswith(prefix) and (
                 os.path.isdir(full) or entry.endswith(ext)
             ):
+                entries.append(entry)
+        return sorted(entries)
+    except Exception:
+        return []
+
+
+def _complete_yoyo_sessions(partial: str) -> list[str]:
+    """Complete session names from .yoyo/*.json for /rm command."""
+    try:
+        yoyo_dir = os.path.join(os.getcwd(), ".yoyo")
+        if not os.path.isdir(yoyo_dir):
+            return []
+        entries = []
+        for entry in os.listdir(yoyo_dir):
+            if entry.endswith(".json") and entry.startswith(partial):
                 entries.append(entry)
         return sorted(entries)
     except Exception:
@@ -1024,6 +1040,125 @@ def _auto_save_on_exit(
         _auto_save_session(save_path, messages, model, usage=usage)
     except Exception:
         pass  # Silent on exit — don't crash during shutdown
+
+
+def _list_sessions(workdir: str | None = None) -> list[dict]:
+    """List all session files in the .yoyo/ directory with metadata.
+
+    Scans for .json files in <workdir>/.yoyo/ and extracts metadata:
+    filename, timestamp, model, message count (excluding system), auto-saved flag,
+    and token usage if available.
+
+    Args:
+        workdir: Working directory to search for .yoyo/. Defaults to cwd.
+
+    Returns a list of dicts sorted by filename, each with session metadata.
+    """
+    if workdir is None:
+        workdir = os.getcwd()
+    yoyo_dir = os.path.join(workdir, ".yoyo")
+
+    if not os.path.isdir(yoyo_dir):
+        return []
+
+    sessions = []
+    for entry in sorted(os.listdir(yoyo_dir)):
+        if not entry.endswith(".json"):
+            continue
+        filepath = os.path.join(yoyo_dir, entry)
+        if not os.path.isfile(filepath):
+            continue
+
+        try:
+            data = json.loads(Path(filepath).read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            continue
+
+        # Must have at least messages and model to be a valid session
+        if not isinstance(data, dict) or "messages" not in data or "model" not in data:
+            continue
+
+        msg_count = len([m for m in data["messages"] if m.get("role") != "system"])
+        meta: dict[str, Any] = {
+            "filename": entry,
+            "filepath": filepath,
+            "timestamp": data.get("timestamp", ""),
+            "model": data.get("model", "unknown"),
+            "message_count": msg_count,
+            "autosaved": data.get("autosaved", False),
+            "input_tokens": data.get("usage", {}).get("input_tokens", 0),
+            "output_tokens": data.get("usage", {}).get("output_tokens", 0),
+        }
+        sessions.append(meta)
+
+    return sessions
+
+
+def _format_sessions_output(sessions: list[dict]) -> str:
+    """Format a list of session metadata dicts into readable output.
+
+    Args:
+        sessions: List of session metadata dicts from _list_sessions.
+
+    Returns a formatted string for display in the REPL.
+    """
+    if not sessions:
+        return f"{DIM}  No saved sessions found in .yoyo/{RESET}\n{DIM}  Use /save to create one{RESET}"
+
+    lines = [f"{BOLD}  Saved Sessions:{RESET}"]
+    for s in sessions:
+        flag = f" {YELLOW}(auto-saved){RESET}" if s["autosaved"] else ""
+        lines.append(f"    {CYAN}{s['filename']}{RESET}{flag}")
+        lines.append(f"      {DIM}model: {s['model']}, {s['message_count']} messages{RESET}")
+        if s["timestamp"]:
+            lines.append(f"      {DIM}saved: {s['timestamp']}{RESET}")
+        if s["input_tokens"] or s["output_tokens"]:
+            lines.append(f"      {DIM}tokens: {s['input_tokens']} in / {s['output_tokens']} out{RESET}")
+    lines.append(f"\n  {DIM}Use /load <filename> to restore, /rm <filename> to delete{RESET}")
+    return "\n".join(lines)
+
+
+def _delete_session(filename: str, workdir: str | None = None) -> bool:
+    """Delete a session file from the .yoyo/ directory.
+
+    Only deletes .json files and only from within .yoyo/ — prevents path traversal.
+
+    Args:
+        filename: Name of the session file to delete (just the basename).
+        workdir: Working directory. Defaults to cwd.
+
+    Returns True if deleted, False if not found or refused.
+    """
+    if workdir is None:
+        workdir = os.getcwd()
+
+    # Security: only allow .json files with no path components
+    if not filename.endswith(".json"):
+        return False
+    # Prevent path traversal: basename must equal filename
+    if os.path.basename(filename) != filename:
+        return False
+    if ".." in filename or "/" in filename or os.sep in filename:
+        return False
+
+    yoyo_dir = os.path.join(workdir, ".yoyo")
+    filepath = os.path.join(yoyo_dir, filename)
+
+    # Verify the resolved path is still inside .yoyo/
+    real_yoyo = os.path.realpath(yoyo_dir)
+    real_file = os.path.realpath(filepath)
+    if not real_file.startswith(real_yoyo + os.sep) and real_file != real_yoyo:
+        return False
+
+    if not os.path.isfile(filepath):
+        return False
+
+    try:
+        os.remove(filepath)
+        return True
+    except OSError:
+        return False
+
 
 def _load_session(filepath: str) -> tuple[list[dict], str, Usage, list[str]] | None:
     """Load a conversation session from a JSON file.
@@ -3789,6 +3924,22 @@ def _build_command_registry(
                 output += f"\n{YELLOW}    • {w}{RESET}"
         return CommandResult(output=output + "\n")
 
+    @registry.register("sessions")
+    def _cmd_sessions(line: str, ctx: dict) -> CommandResult:
+        """List all saved sessions in .yoyo/ with metadata."""
+        sessions = _list_sessions()
+        return CommandResult(output=_format_sessions_output(sessions) + "\n")
+
+    @registry.register("rm")
+    def _cmd_rm(line: str, ctx: dict) -> CommandResult:
+        """Delete a saved session file from .yoyo/."""
+        filename = line[3:].strip()
+        if not filename:
+            return CommandResult(output=f"{YELLOW}Usage: /rm <session-file>{RESET}\n{DIM}  Use /sessions to list available files{RESET}\n")
+        if _delete_session(filename):
+            return CommandResult(output=f"{GREEN}  ✓ Deleted {filename}{RESET}\n")
+        return CommandResult(output=f"{RED}  Failed to delete {filename}{RESET}\n{DIM}  File may not exist or is not a .json session file{RESET}\n")
+
     @registry.register("resume")
     def _cmd_resume(line: str, ctx: dict) -> CommandResult:
         result = _handle_resume_command()
@@ -3948,6 +4099,8 @@ def _print_help() -> None:
   {BOLD}Persistence:{RESET}
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
     {CYAN}/load [path]{RESET}    Load session (default: .yoyo/session.json)
+    {CYAN}/sessions{RESET}       List saved sessions in .yoyo/ with metadata
+    {CYAN}/rm <file>{RESET}      Delete a session file from .yoyo/
     {CYAN}/export [path]{RESET}  Export conversation as markdown (--system to include system prompt)
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
