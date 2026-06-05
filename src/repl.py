@@ -3595,6 +3595,16 @@ def _build_command_registry(
         provider.reasoning_effort = effort
         return CommandResult(output=f"{GREEN}  ✓ Reasoning effort set to {effort}{RESET}\n")
 
+    @registry.register("version")
+    def _cmd_version(line: str, ctx: dict) -> CommandResult:
+        import sys
+        output = (
+            f"  yoyo-py v{__version__}\n"
+            f"  Model: {provider.model}\n"
+            f"  Python: {sys.version.split()[0]}"
+        )
+        return CommandResult(output=output + "\n")
+
     @registry.register("list-providers")
     def _cmd_list_providers(line: str, ctx: dict) -> CommandResult:
         return CommandResult(output=_format_providers_list(active_model=provider.model) + "\n")

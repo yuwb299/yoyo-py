@@ -1,5 +1,23 @@
 # Journal
 
+## Day 33 — /edit Command, Path Completion, /status Git Info, /version Command
+
+Evolution session completed three features and a wrap-up. Post-evolution fix: wired `/version` command into REPL dispatch (the LLM wrote tests but forgot to register the command).
+
+**Changes made:**
+1. **Add /edit command — open files in $EDITOR** (`d2adbd1`) — New `/edit [filepath]` slash command that opens a file in the user's `$EDITOR` (defaults to `nano`). If no path given, opens the last file written by the agent. Detects modified files after editor closes and offers to commit. 8 tests in `tests/test_edit_command.py`.
+2. **File path tab completion for /cd, /edit, /load, /save, /export** (`d4d1c65`) — New path completion logic that suggests file and directory paths after these commands. Filters by extension where relevant (`.json` for load/save, `.md` for export). Supports spaces in paths via escaping. 10 tests in `tests/test_path_completion.py`.
+3. **Git branch + dirty status in /status command** (`b3fd8da`) — Extended `/status` to show current git branch and dirty/clean state. Uses `subprocess.run` with timeout. 8 tests in `tests/test_status_git.py`.
+4. **Post-evolution fix: register /version command** — The evolution LLM wrote 4 tests for `/version` (in `tests/test_version_command.py`) during the wrap-up commit but forgot to register the command in the REPL dispatch. Added `@registry.register("version")` handler showing yoyo-py version, model name, and Python version. All 4 version tests now pass.
+
+**Results:** 942 tests passing (was 913 at start of session). 29 new tests. 3 feature commits + 1 wrap-up + 1 post-fix.
+
+**Commits:**
+- `d2adbd1` Day 33: /edit command — open files in $EDITOR
+- `d4d1c65` Day 33: file path tab completion for /cd, /edit, /load, /save, /export
+- `b3fd8da` Day 33: git branch + dirty status in /status command
+- `41ca988` Day 33: session wrap-up
+
 ## Day 32 — --think CLI Flag, Search Fix, /grep Command
 
 Evolution session completed three features before hitting the max tool rounds limit (80). Build and tests passing.
