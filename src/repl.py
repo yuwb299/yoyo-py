@@ -140,7 +140,7 @@ _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
-    "/tree", "/init", "/health", "/test", "/fix",
+    "/tree", "/init", "/health", "/test", "/fix", "/edit",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/think",
     "/save", "/load", "/export", "/remember", "/memories", "/forget",
@@ -1638,6 +1638,37 @@ def _run_test_command(workdir: str | None = None) -> str:
 
     else:
         return f"{DIM}No recognized project type found — can't determine test command{RESET}"
+
+
+def _run_edit_command(filepath: str) -> str:
+    """Open a file in the user's $EDITOR (defaults to vim).
+
+    Args:
+        filepath: Path to the file to edit.
+
+    Returns:
+        Status message.
+    """
+    import subprocess
+
+    if not filepath:
+        return f"{YELLOW}Usage: /edit <file>{RESET}"
+
+    p = Path(filepath)
+    if not p.exists():
+        return f"{RED}  File not found: {filepath}{RESET}"
+    if not p.is_file():
+        return f"{RED}  Not a file: {filepath}{RESET}"
+
+    editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vim"
+
+    try:
+        subprocess.call([editor, str(p)])
+        return f"{GREEN}  ✓ Opened {filepath} in {editor}{RESET}"
+    except FileNotFoundError:
+        return f"{RED}  Editor '{editor}' not found — set EDITOR env var{RESET}"
+    except Exception as e:
+        return f"{RED}  Error opening editor: {e}{RESET}"
 
 
 def _run_init_command(workdir: str | None = None, force: bool = False) -> str:
@@ -3319,6 +3350,11 @@ def _build_command_registry(
         force = "--force" in line.lower()
         return CommandResult(output=_run_init_command(force=force) + "\n")
 
+    @registry.register("edit")
+    def _cmd_edit(line: str, ctx: dict) -> CommandResult:
+        filepath = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_edit_command(filepath) + "\n")
+
     # ── Session info commands ─────────────────────────────────────
 
     @registry.register("status")
@@ -3599,6 +3635,7 @@ def _print_help() -> None:
   {BOLD}Project:{RESET}
     {CYAN}/tree{RESET}           Show project directory structure
     {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
+    {CYAN}/edit <file>{RESET}    Open file in $EDITOR (default: vim)
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/test{RESET}           Run project tests
     {CYAN}/fix{RESET}            Auto-fix lint/format errors
