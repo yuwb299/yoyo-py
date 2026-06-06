@@ -142,7 +142,7 @@ _SLASH_COMMANDS = sorted([
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
     "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
-    "/config", "/list-providers", "/think", "/version",
+    "/config", "/list-providers", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
     "/skills", "/commands",
 ])
@@ -3671,6 +3671,11 @@ def _build_command_registry(
             _print_help()
         return CommandResult(output=buf.getvalue())
 
+    @registry.register("man")
+    def _cmd_man(line: str, ctx: dict) -> CommandResult:
+        command = line[4:].strip().lstrip("/") if len(line) > 4 else ""
+        return CommandResult(output=_format_man_page(command) + "\n")
+
     @registry.register("redo")
     def _cmd_redo(line: str, ctx: dict) -> CommandResult:
         last_msg = _find_last_user_message(agent.state.messages)
@@ -4075,11 +4080,364 @@ def _build_command_registry(
     return registry
 
 
+_MAN_PAGES: dict[str, str] = {
+    "test": f"""\
+{BOLD}/test{RESET} — Run project tests
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /test                Run the full test suite
+  /test <file>         Run a specific test file
+  /test -k <pattern>   Run tests matching a keyword pattern
+  /test -x             Stop on first failure
+  /test --lf           Re-run last failed tests
+  /test -v             Verbose output
+
+{BOLD}Examples:{RESET}
+  /test tests/test_agent.py
+  /test -k test_compact
+  /test tests/test_foo.py -x -v
+
+{DIM}Detects project type (Python/Node/Rust/Go/Java) and runs the
+appropriate test runner. Extra args are passed through to pytest,
+cargo test, go test, npm test, or mvn test.{RESET}""",
+
+    "health": f"""\
+{BOLD}/health{RESET} — Run build/test/lint diagnostics
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /health              Run all diagnostics for the project
+
+{DIM}Detects project type and runs appropriate checks:
+  Python: pytest + ruff/flake8 + mypy
+  Node:   npm test + npm lint
+  Rust:   cargo test + cargo clippy
+  Go:     go test + go vet
+  Java:   mvn test{RESET}""",
+
+    "fix": f"""\
+{BOLD}/fix{RESET} — Auto-fix lint/format errors
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /fix                 Auto-fix lint and format errors
+
+{DIM}Runs appropriate fixers for the project type:
+  Python: ruff check --fix / black / isort
+  Node:   npm run fix (if configured)
+  Rust:   cargo fix{RESET}""",
+
+    "commit": f"""\
+{BOLD}/commit{RESET} — Stage all and commit
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /commit <message>    Stage all changes and commit with message
+
+{BOLD}Example:{RESET}
+  /commit fix: handle empty input in search
+
+{DIM}Runs git add -A followed by git commit -m <message>.
+To review changes first, use /diff or /review.{RESET}""",
+
+    "review": f"""\
+{BOLD}/review{RESET} — AI code review of changes
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /review              Review current unstaged changes
+  /review --staged     Review staged changes
+  /review --commit     Review the last commit
+
+{DIM}Sends the diff to the LLM for review and returns feedback
+on code quality, potential bugs, and suggestions.{RESET}""",
+
+    "diff": f"""\
+{BOLD}/diff{RESET} — Show git diff summary
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /diff                Show summary of uncommitted changes
+
+{DIM}Shows file-level diff stats (files changed, insertions, deletions).
+Use /review for AI-powered review of the changes.{RESET}""",
+
+    "status": f"""\
+{BOLD}/status{RESET} — Show session info
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /status              Show model, tokens, git branch, context size
+
+{DIM}Displays: active model, token usage (input/output), git branch,
+dirty/clean state, context token estimate, loaded skills count.{RESET}""",
+
+    "config": f"""\
+{BOLD}/config{RESET} — View/set generation parameters
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /config                          Show current settings
+  /config temperature <value>      Set temperature (0.0-2.0)
+  /config max_tokens <value>       Set max output tokens
+  /config top_p <value>            Set top_p (0.0-1.0)
+  /config reset                    Reset all to defaults
+
+{BOLD}Example:{RESET}
+  /config temperature 0.7{RESET}""",
+
+    "model": f"""\
+{BOLD}/model{RESET} — Switch model mid-session
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /model <name>        Switch model (clears history)
+  /model <name> --keep Switch model (preserve history)
+
+{BOLD}Examples:{RESET}
+  /model gpt-4o
+  /model deepseek-chat --keep
+
+{DIM}The model name is passed directly to the API provider.
+Use /list-providers to see available provider presets.{RESET}""",
+
+    "compact": f"""\
+{BOLD}/compact{RESET} — Compact conversation history
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /compact             Summarize old messages to reduce context size
+
+{DIM}Compacts the conversation by replacing old messages with a summary.
+Auto-compaction happens when context exceeds the threshold (~80k tokens),
+but you can manually trigger it anytime.
+Use /status to see current context size.{RESET}""",
+
+    "export": f"""\
+{BOLD}/export{RESET} — Export conversation as markdown
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /export [path]              Export as markdown (default: conversation.md)
+  /export [path] --system     Include system prompt in export
+
+{BOLD}Example:{RESET}
+  /export notes.md{RESET}""",
+
+    "search": f"""\
+{BOLD}/search{RESET} — Search conversation history
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /search <keyword>     Search conversation (case-insensitive)
+  /search <keyword> --case   Case-sensitive search
+
+{BOLD}Example:{RESET}
+  /search authentication{RESET}""",
+
+    "grep": f"""\
+{BOLD}/grep{RESET} — Search file contents
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /grep <pattern>              Search files (case-insensitive)
+  /grep <pattern> --case      Case-sensitive search
+  /grep <pattern> --glob *.py Filter by file pattern
+
+{BOLD}Examples:{RESET}
+  /grep TODO
+  /grep "class Agent" --glob *.py
+  /grep "def test_" --case{RESET}""",
+
+    "think": f"""\
+{BOLD}/think{RESET} — Control reasoning depth
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /think               Show current reasoning effort
+  /think low|medium|high   Set reasoning effort
+  /think off           Disable extended thinking (use API default)
+
+{DIM}Controls extended thinking depth for models that support it.
+Higher effort = deeper reasoning but slower and more tokens.{RESET}""",
+
+    "save": f"""\
+{BOLD}/save{RESET} — Save session
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /save [path]         Save session (default: .yoyo/session.json)
+
+{BOLD}Example:{RESET}
+  /save .yoyo/backup.json
+
+{DIM}Sessions auto-save on exit. Use /save for explicit checkpoints.{RESET}""",
+
+    "load": f"""\
+{BOLD}/load{RESET} — Load session
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /load [path]         Load session (default: .yoyo/session.json)
+
+{DIM}Restores messages, model, and token usage from a saved session.{RESET}""",
+
+    "redo": f"""\
+{BOLD}/redo{RESET} — Re-send last user prompt
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /redo                Re-send the last user message to the LLM
+
+{DIM}Useful when the response wasn't good enough and you want to try
+again with the same prompt.{RESET}""",
+
+    "revert": f"""\
+{BOLD}/revert{RESET} — Remove messages from history
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /revert [N]          Remove last N exchanges (default: 1)
+
+{BOLD}Example:{RESET}
+  /revert 3            Remove last 3 user-assistant exchanges
+
+{DIM}Removes complete exchanges (user + assistant + tool messages).
+Does NOT undo file changes — use /undo for that.{RESET}""",
+
+    "undo": f"""\
+{BOLD}/undo{RESET} — Undo uncommitted changes
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /undo                Restore all files to HEAD state
+
+{DIM}Runs git checkout -- . to discard uncommitted changes.
+This is destructive — make sure you want to lose those changes.{RESET}""",
+
+    "log": f"""\
+{BOLD}/log{RESET} — Show recent git commits
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /log [N] [--oneline]   Show last N commits (default: 10)
+
+{BOLD}Examples:{RESET}
+  /log 20
+  /log --oneline
+  /log 5 --oneline{RESET}""",
+
+    "pr": f"""\
+{BOLD}/pr{RESET} — Generate PR description
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /pr                  Generate a PR description from current changes
+
+{DIM}Analyzes git diff and commit history to suggest a PR title,
+description, and type (feature/fix/refactor).{RESET}""",
+
+    "tree": f"""\
+{BOLD}/tree{RESET} — Show project structure
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /tree                Show directory tree of the project
+
+{DIM}Displays a visual tree of files and directories, skipping
+common ignore patterns (.git, __pycache__, node_modules, etc.).{RESET}""",
+
+    "count": f"""\
+{BOLD}/count{RESET} — Count lines of code by language
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /count               Show line counts and file counts by language
+
+{DIM}Scans the project directory and categorizes files by language,
+showing total lines, file count, and percentage per language.{RESET}""",
+
+    "env": f"""\
+{BOLD}/env{RESET} — Show provider configuration
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /env                 Show model, base URL, API key (masked), params
+
+{DIM}Displays the current provider configuration with the API key
+partially masked for security.{RESET}""",
+
+    "edit": f"""\
+{BOLD}/edit{RESET} — Open file in editor
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /edit <filepath>     Open file in $EDITOR (default: vim)
+  /edit                Open the last file written by the agent
+
+{DIM}After closing the editor, detects if the file was modified
+and offers to commit the changes.{RESET}""",
+
+    "init": f"""\
+{BOLD}/init{RESET} — Generate YOYO.md context file
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /init                Scan project and generate YOYO.md
+  /init --force        Overwrite existing YOYO.md
+
+{DIM}Scans the project structure, dependencies, and key files to
+create a YOYO.md that helps the agent understand the project.{RESET}""",
+
+    "remember": f"""\
+{BOLD}/remember{RESET} — Save a project fact
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /remember <text>     Save a fact for future sessions
+
+{BOLD}Examples:{RESET}
+  /remember Use pytest for tests, test files in tests/
+  /remember The main API endpoint is /api/v2/
+
+{DIM}Facts are stored in .yoyo/memories.json and loaded in future
+sessions automatically. Use /memories to list, /forget <id> to remove.{RESET}""",
+}
+
+
+def _format_man_page(command: str) -> str:
+    """Format and return the man page for a command.
+
+    Args:
+        command: Command name (without /), or empty for usage hint.
+
+    Returns:
+        Formatted man page text.
+    """
+    if not command:
+        available = ", ".join(sorted(_MAN_PAGES.keys()))
+        return (
+            f"{YELLOW}Usage: /man <command>{RESET}\n"
+            f"{DIM}  Available commands: {available}{RESET}"
+        )
+
+    if command not in _MAN_PAGES:
+        available = ", ".join(sorted(_MAN_PAGES.keys()))
+        return (
+            f"{RED}  No help for /{command}{RESET}\n"
+            f"{DIM}  Available: {available}{RESET}"
+        )
+
+    return _MAN_PAGES[command]
+
+
 def _print_help() -> None:
     print(f"""
 {BOLD}  Session:{RESET}
     {CYAN}/quit, /exit{RESET}    Exit the agent
     {CYAN}/help{RESET}           Show this help
+    {CYAN}/man <cmd>{RESET}       Show detailed help for a command
     {CYAN}/clear{RESET}          Clear conversation history
     {CYAN}/redo{RESET}           Re-send the last user prompt
     {CYAN}/revert [N]{RESET}      Remove last N exchanges from history (default 1)
