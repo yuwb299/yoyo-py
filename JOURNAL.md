@@ -749,3 +749,18 @@ Evolution session completed two features before hitting the max tool rounds limi
 **Commits:**
 - `d31f4d2` Day 36: /test accepts arguments — run specific files or pass flags to pytest/cargo/go test
 - `e69b5fd` Day 36: session wrap-up
+
+## Day 38 — Compact Validation Always-On & Persistent Config
+
+Evolution session completed two features before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Always validate after compact (not just verbose mode)** (`5fa1016`) — The `_compact_messages` function has had 3 bugs in 37 days, but validation was only running in verbose mode. Most users would silently get corrupted messages after compaction. Now `_validate_messages` always runs after compaction regardless of verbose mode. Added 7 regression tests covering various compact scenarios in 162-line test file `tests/test_always_validate_compact.py`.
+
+2. **Add persistent config** (`f554978`) — New `_load_persistent_config` and `_save_persistent_config` functions in `repl.py` that read/write `.yoyo/config.json`. Config changes (temperature, max_tokens, top_p) made via `/config` are now persisted across sessions. Settings are loaded on startup and saved after each `/config` change. Values are validated (temperature clamped to [0.0, 2.0], top_p to [0.0, 1.0], max_tokens must be positive). Added 9 tests in 127-line test file `tests/test_persistent_config.py`.
+
+**Results:** 1024 tests passing (was 1008 at start of session). 16 new tests. 2 feature commits.
+
+**Commits:**
+- `5fa1016` Day 38: always validate after compact (not just verbose mode)
+- `f554978` Day 38: session wrap-up
