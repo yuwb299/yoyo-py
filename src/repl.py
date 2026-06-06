@@ -4403,6 +4403,208 @@ create a YOYO.md that helps the agent understand the project.{RESET}""",
 
 {DIM}Facts are stored in .yoyo/memories.json and loaded in future
 sessions automatically. Use /memories to list, /forget <id> to remove.{RESET}""",
+
+    "memories": f"""\
+{BOLD}/memories{RESET} — List remembered facts
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /memories            List all remembered project facts
+
+{DIM}Shows all facts saved with /remember, with their IDs.
+Use /forget <id> to remove a specific fact.{RESET}""",
+
+    "forget": f"""\
+{BOLD}/forget{RESET} — Remove a remembered fact
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /forget <id>         Remove a fact by its ID number
+
+{BOLD}Example:{RESET}
+  /forget 3
+
+{DIM}Use /memories to see all facts and their IDs.{RESET}""",
+
+    "clear": f"""\
+{BOLD}/clear{RESET} — Clear conversation history
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /clear               Clear all messages (keeps system prompt)
+
+{DIM}Removes all conversation messages but preserves the system prompt,
+model, and configuration. Useful for starting a fresh topic.{RESET}""",
+
+    "last": f"""\
+{BOLD}/last{RESET} — Redisplay last response
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /last                Show the last assistant response again
+
+{DIM}Useful when the response scrolled off screen or you want
+to re-read it.{RESET}""",
+
+    "copy": f"""\
+{BOLD}/copy{RESET} — Copy last response to clipboard
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /copy                Copy the last assistant response to clipboard
+
+{DIM}Uses pbcopy (macOS) or xclip (Linux).{RESET}""",
+
+    "resume": f"""\
+{BOLD}/resume{RESET} — Resume last auto-saved session
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /resume              Load the most recent auto-saved session
+
+{DIM}Sessions are auto-saved to .yoyo/ on exit. This command loads
+the most recent one.{RESET}""",
+
+    "cd": f"""\
+{BOLD}/cd{RESET} — Change working directory
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /cd [path]           Change working directory (default: home)
+
+{BOLD}Examples:{RESET}
+  /cd ~/projects/myapp
+  /cd ../other-repo
+  /cd                  Go to home directory
+
+{DIM}Changes the directory where tools (bash, read_file, etc.) operate.{RESET}""",
+
+    "tokens": f"""\
+{BOLD}/tokens{RESET} — Show token usage
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /tokens              Show input/output token counts and totals
+
+{DIM}Displays cumulative token usage for the current session.{RESET}""",
+
+    "cost": f"""\
+{BOLD}/cost{RESET} — Estimate API cost
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /cost                Estimate API cost from token usage
+
+{DIM}Shows estimated cost based on token counts and known pricing
+for common models.{RESET}""",
+
+    "history": f"""\
+{BOLD}/history{RESET} — Show conversation history
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /history             Show conversation history summary
+  /history --tokens    Include token estimates per message
+
+{DIM}Shows a compact summary of all messages in the conversation,
+with roles and truncated content.{RESET}""",
+
+    "system": f"""\
+{BOLD}/system{RESET} — View current system prompt
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /system              Display the current system prompt
+
+{DIM}Shows the full system prompt being sent to the model, including
+any loaded skills and project context.{RESET}""",
+
+    "list-providers": f"""\
+{BOLD}/list-providers{RESET} — List available provider presets
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /list-providers      Show available provider presets
+
+{DIM}Lists all built-in provider configurations (model, base URL,
+and description) that can be used with --provider flag.{RESET}""",
+
+    "sessions": f"""\
+{BOLD}/sessions{RESET} — List saved sessions
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /sessions            List saved sessions in .yoyo/
+
+{DIM}Shows all session files with metadata (date, message count,
+model, token usage).{RESET}""",
+
+    "rm": f"""\
+{BOLD}/rm{RESET} — Delete a session file
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /rm <file>           Delete a session file from .yoyo/
+
+{BOLD}Example:{RESET}
+  /rm old-session.json
+
+{DIM}Removes a session file from the .yoyo/ directory.
+Use /sessions to see available files.{RESET}""",
+
+    "skills": f"""\
+{BOLD}/skills{RESET} — List loaded skills
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /skills              List all loaded skills
+
+{DIM}Shows skills loaded from .yoyo/skills/ or via --skills flag.
+Each skill provides the agent with additional capabilities.{RESET}""",
+
+    "commands": f"""\
+{BOLD}/commands{RESET} — List custom slash commands
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /commands            List custom commands from .yoyo/commands/
+
+{DIM}Custom commands are markdown files in .yoyo/commands/ that
+become available as /<name> commands in the session.{RESET}""",
+
+    "help": f"""\
+{BOLD}/help{RESET} — Show help
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /help                Show all available commands
+
+{DIM}Displays the full command reference. Use /man <command>
+for detailed help on a specific command.{RESET}""",
+
+    "man": f"""\
+{BOLD}/man{RESET} — Show command manual
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /man <command>       Show detailed help for a command
+  /man                 List available commands with help
+
+{BOLD}Example:{RESET}
+  /man test
+  /man commit
+
+{DIM}Shows usage, examples, and description for a command.{RESET}""",
+
+    "quit": f"""\
+{BOLD}/quit, /exit{RESET} — Exit the agent
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /quit                Exit the session (auto-saves)
+  /exit                Same as /quit
+
+{DIM}Session is auto-saved to .yoyo/ before exiting.{RESET}""",
 }
 
 
