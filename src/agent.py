@@ -117,13 +117,13 @@ class Agent:
             # This prevents token limit errors on long conversations
             if self._should_compact(self.state.messages, max_tokens=self.state.compact_threshold):
                 self.state.messages = self._compact_messages(self.state.messages)
-                # Validate compacted messages in verbose mode — catches bugs
-                # in _compact_messages before they cause API errors
-                if self.verbose:
-                    issues = self._validate_messages(self.state.messages)
-                    if issues:
-                        import sys
-                        print(f"[compact validation] {issues}", file=sys.stderr)
+                # Always validate compacted messages — _compact_messages has had
+                # 3 bugs in 37 days (Days 5, 18, 37). Silent corruption is worse
+                # than a visible warning, so we always check.
+                issues = self._validate_messages(self.state.messages)
+                if issues:
+                    import sys
+                    print(f"[compact validation] {issues}", file=sys.stderr)
 
             try:
                 response = self.provider.chat(
