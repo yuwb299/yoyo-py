@@ -186,6 +186,78 @@ def _save_readline_history() -> None:
         pass
 
 
+# ── Persistent config: save/load generation settings ───────────────────
+
+# Valid config keys and their validation rules
+_VALID_CONFIG_KEYS = {"temperature", "max_tokens", "top_p"}
+
+
+def _get_default_config_path() -> str:
+    """Return the default path for persistent config: .yoyo/config.json in cwd."""
+    return os.path.join(os.getcwd(), ".yoyo", "config.json")
+
+
+def _load_persistent_config(config_path: str | None = None) -> dict[str, Any]:
+    """Load persistent config from .yoyo/config.json.
+
+    Returns only valid keys (temperature, max_tokens, top_p).
+    Returns empty dict if file doesn't exist or is corrupt.
+    """
+    path = config_path or _get_default_config_path()
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+    # Filter to valid keys only
+    return {k: v for k, v in data.items() if k in _VALID_CONFIG_KEYS}
+
+
+def _save_persistent_config(
+    settings: dict[str, Any],
+    config_path: str | None = None,
+) -> None:
+    """Save settings to .yoyo/config.json, merging with existing config.
+
+    Validates values before saving:
+    - temperature: clamped to [0.0, 2.0]
+    - top_p: clamped to [0.0, 1.0]
+    - max_tokens: must be positive (skipped if invalid)
+
+    Creates the .yoyo/ directory if needed.
+    """
+    path = config_path or _get_default_config_path()
+    dir_path = os.path.dirname(path)
+
+    # Load existing config to merge with
+    existing = _load_persistent_config(config_path=path)
+
+    for key, value in settings.items():
+        if key not in _VALID_CONFIG_KEYS:
+            continue
+        if value is None:
+            # Remove key (reset to default)
+            existing.pop(key, None)
+            continue
+        # Validate
+        if key == "temperature":
+            value = max(0.0, min(2.0, float(value)))
+        elif key == "top_p":
+            value = max(0.0, min(1.0, float(value)))
+        elif key == "max_tokens":
+            value = int(value)
+            if value < 1:
+                continue  # Skip invalid value
+        existing[key] = value
+
+    # Create directory if needed
+    os.makedirs(dir_path, exist_ok=True)
+
+    with open(path, "w") as f:
+        json.dump(existing, f, indent=2)
+        f.write("\n")
+
+
 def _slash_completer(text: str, state: int) -> str | None:
     """Readline completer: suggests slash commands and file paths.
 
@@ -437,6 +509,12 @@ async def run_repl(
         verbose=verbose,
         confirm_fn=confirm_fn,
     )
+
+    # Load persistent config from .yoyo/config.json (temperature, max_tokens, top_p)
+    # so settings survive across sessions
+    saved_config = _load_persistent_config()
+    for key, value in saved_config.items():
+        setattr(provider, key, value)
 
     # Handle --resume flag: restore last auto-saved session before starting REPL
     if resume and not pipe_input and not initial_prompt:
@@ -3709,8 +3787,14 @@ def _build_command_registry(
         agent.state.messages = Agent._compact_messages(agent.state.messages)
         new_count = len(agent.state.messages)
         new_tokens = Agent._estimate_tokens(agent.state.messages)
+        # Validate after compact — same reason as in agent loop:
+        # _compact_messages has had 3 bugs. Always check.
+        issues = Agent._validate_messages(agent.state.messages)
+        warn = ""
+        if issues:
+            warn = f"\n{DIM}  ⚠ compact validation issues: {issues}{RESET}"
         return CommandResult(
-            output=f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){RESET}\n"
+            output=f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){warn}{RESET}\n"
         )
 
     # ── Git commands ──────────────────────────────────────────────
@@ -3882,6 +3966,9 @@ def _build_command_registry(
         )
         for key, value in updates.items():
             setattr(provider, key, value)
+        # Persist config changes to .yoyo/config.json so they survive restarts
+        if updates:
+            _save_persistent_config(updates)
         return CommandResult(output=output + "\n")
 
     @registry.register("think")
