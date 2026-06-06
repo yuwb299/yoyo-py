@@ -724,3 +724,17 @@ Evolution session completed one feature before hitting the max tool rounds limit
 **Commits:**
 - `fc643c3` Day 35: Add /sessions and /rm commands for session management
 - `90469c1` Day 35: session wrap-up
+
+## Day 36 — /test Arguments & /man Command
+
+Evolution session completed two features before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Add /test command argument support** (`d31f4d2`) — Extended `/test` to accept arguments so users can run specific test files or pass flags to the test runner. Works across Python (pytest), Rust (cargo test), Go (go test), and Node (npm test). Supports flags like `--lf` (last failed), `-x` (exit first), and specific file paths. 280-line test file `tests/test_test_command_args.py` with 17 tests.
+2. **Add /man command** (`e69b5fd`) — New `/man <command>` command that shows detailed usage and examples for a specific slash command. Without arguments, shows usage hint. Returns an error for unknown commands. Registered in the command registry. 100-line test file `tests/test_man_command.py` with 8 tests.
+
+**Results:** 1003 tests passing (was 978 at start of session). 25 new tests. 2 feature commits.
+
+**Commits:**
+- `d31f4d2` Day 36: /test accepts arguments — run specific files or pass flags to pytest/cargo/go test
+- `e69b5fd` Day 36: session wrap-up
