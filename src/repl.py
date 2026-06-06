@@ -1900,11 +1900,16 @@ def _run_health_check(workdir: str | None = None) -> str:
     return "\n".join(parts)
 
 
-def _run_test_command(workdir: str | None = None) -> str:
+def _run_test_command(workdir: str | None = None, args: str = "") -> str:
     """Detect project type and run tests.
 
     Simpler and more focused than /health — just runs the test suite
     and shows results. Returns a formatted summary.
+
+    Args:
+        workdir: Working directory to run tests in. Defaults to cwd.
+        args: Extra arguments to pass to the test runner (e.g. test file
+              paths, pytest flags like '-k pattern', '-x', '-v').
     """
     cwd = workdir or os.getcwd()
     p = Path(cwd)
@@ -1913,6 +1918,9 @@ def _run_test_command(workdir: str | None = None) -> str:
         return f"[ERROR] Directory not found: {cwd}"
     if not p.is_dir():
         return f"[ERROR] Not a directory: {cwd}"
+
+    # Parse extra args into a list for subprocess
+    extra = args.split() if args else []
 
     # Detect Python project
     is_python = (
@@ -1936,8 +1944,9 @@ def _run_test_command(workdir: str | None = None) -> str:
 
     if is_python:
         try:
+            cmd = ["python", "-m", "pytest", "--tb=short", "-q"] + extra
             result = subprocess.run(
-                ["python", "-m", "pytest", "--tb=short", "-q"],
+                cmd,
                 capture_output=True, text=True, timeout=120, cwd=cwd,
             )
             output = result.stdout.strip() or result.stderr.strip()
@@ -1960,8 +1969,12 @@ def _run_test_command(workdir: str | None = None) -> str:
 
     elif is_node:
         try:
+            # For Node, pass extra args after -- to npm test
+            cmd = ["npm", "test"]
+            if extra:
+                cmd += ["--"] + extra
             result = subprocess.run(
-                ["npm", "test"],
+                cmd,
                 capture_output=True, text=True, timeout=120, cwd=cwd,
             )
             output = result.stdout.strip() or result.stderr.strip()
@@ -1980,8 +1993,12 @@ def _run_test_command(workdir: str | None = None) -> str:
 
     elif is_rust:
         try:
+            # For Rust, extra args after -- to cargo test
+            cmd = ["cargo", "test", "--quiet"]
+            if extra:
+                cmd += ["--"] + extra
             result = subprocess.run(
-                ["cargo", "test", "--quiet"],
+                cmd,
                 capture_output=True, text=True, timeout=120, cwd=cwd,
             )
             output = result.stdout.strip() or result.stderr.strip()
@@ -2002,8 +2019,14 @@ def _run_test_command(workdir: str | None = None) -> str:
 
     elif is_go:
         try:
+            # For Go, extra args can be packages or flags
+            cmd = ["go", "test"]
+            if extra:
+                cmd += extra
+            else:
+                cmd.append("./...")
             result = subprocess.run(
-                ["go", "test", "./..."],
+                cmd,
                 capture_output=True, text=True, timeout=120, cwd=cwd,
             )
             output = result.stdout.strip() or result.stderr.strip()
@@ -2022,8 +2045,12 @@ def _run_test_command(workdir: str | None = None) -> str:
 
     elif is_java:
         try:
+            # For Maven, extra args as -Dtest=... or other flags
+            cmd = ["mvn", "test", "-q"]
+            if extra:
+                cmd += extra
             result = subprocess.run(
-                ["mvn", "test", "-q"],
+                cmd,
                 capture_output=True, text=True, timeout=120, cwd=cwd,
             )
             output = result.stdout.strip() or result.stderr.strip()
@@ -3753,7 +3780,8 @@ def _build_command_registry(
 
     @registry.register("test")
     def _cmd_test(line: str, ctx: dict) -> CommandResult:
-        return CommandResult(output=_run_test_command() + "\n")
+        test_args = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_test_command(args=test_args) + "\n")
 
     @registry.register("fix")
     def _cmd_fix(line: str, ctx: dict) -> CommandResult:
@@ -4078,7 +4106,7 @@ def _print_help() -> None:
     {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
     {CYAN}/edit <file>{RESET}    Open file in $EDITOR (default: vim)
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
-    {CYAN}/test{RESET}           Run project tests
+    {CYAN}/test{RESET}           Run project tests (optional: /test <file> or /test -k pattern)
     {CYAN}/fix{RESET}            Auto-fix lint/format errors
 
   {BOLD}Session Info:{RESET}
