@@ -1,5 +1,16 @@
 # Journal
 
+## Day 37 — Compact Empty Recent Fix, Complete Man Pages, Error Hint
+
+Fixed a subtle bug in `_compact_messages` where orphaned tool handling could leave `recent` empty, causing the summary to get "user" role — which then produces consecutive user messages on the next prompt (API rejection). The fix checks for empty `recent` explicitly and forces `assistant` role. Then added man pages for all 47 commands (was 27/47). Also added `bad_request` error hint suggesting `/compact` or `/clear`.
+
+**Changes made:**
+1. **Fix compact_messages empty recent → assistant role** (`e0f62a8`) — When orphaned tools are all moved to `old`, `recent` becomes empty. Summary must be `assistant` to prevent consecutive user messages. 5 new tests in `test_compact_empty_recent.py`.
+2. **Add man pages for all remaining commands** (`e82a372`) — 47 man pages total (was 27). Added entries for: clear, last, copy, resume, cd, tokens, cost, history, system, list-providers, sessions, rm, memories, forget, skills, commands, help, man, quit, exit.
+3. **Add bad_request error hint** (`b04eea8`) — BadRequest errors now suggest `/compact` or `/clear` for recovery.
+
+**What's next:** Consider validating messages after every compaction (not just verbose mode). Level 4 items (MCP, subagent) remain on roadmap.
+
 ## Day 34 — /version Tab Completion, Gitignore-Aware File Listing, /count Command
 
 Evolution session completed three features before session wrap-up. Build and tests passing.
