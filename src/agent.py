@@ -614,11 +614,15 @@ class Agent:
             summary_text += f"\n... ({skipped} more messages not shown)"
 
         # Choose summary role to avoid consecutive same-role messages:
-        # If the first message in recent is a user message, the summary should be
-        # assistant role to prevent consecutive user messages (which some APIs reject).
-        # Otherwise, user role is fine (and more natural for summaries).
-        first_recent_role = recent[0].get("role") if recent else None
-        summary_role = "assistant" if first_recent_role == "user" else "user"
+        # - If recent is empty, the next message will be from the user, so summary
+        #   MUST be assistant to prevent consecutive user messages (API rejection).
+        # - If recent starts with a user message, summary should be assistant (same reason).
+        # - Otherwise (recent starts with assistant/tool), user role is fine.
+        if not recent:
+            summary_role = "assistant"
+        else:
+            first_recent_role = recent[0].get("role")
+            summary_role = "assistant" if first_recent_role == "user" else "user"
         summary_msg = {"role": summary_role, "content": summary_text}
 
         return system_msgs + [summary_msg] + recent
