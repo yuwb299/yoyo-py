@@ -142,6 +142,8 @@ class Agent:
                     hint = " (check your API key in .env)"
                 elif e.category == "connection":
                     hint = " (network issue — check your internet connection)"
+                elif e.category == "bad_request":
+                    hint = " (API rejected the request — try /compact if context is corrupted, or /clear to start fresh)"
                 elif e.category == "timeout":
                     hint = " (request timed out — try a shorter prompt)"
                 error_msg = f"{e}{hint}"

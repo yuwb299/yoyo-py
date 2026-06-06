@@ -4605,6 +4605,16 @@ for detailed help on a specific command.{RESET}""",
   /exit                Same as /quit
 
 {DIM}Session is auto-saved to .yoyo/ before exiting.{RESET}""",
+
+    "exit": f"""\
+{BOLD}/exit{RESET} — Exit the agent
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /exit                Exit the session (auto-saves)
+  /quit                Same as /exit
+
+{DIM}Session is auto-saved to .yoyo/ before exiting.{RESET}""",
 }
 
 
