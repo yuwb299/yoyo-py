@@ -764,3 +764,19 @@ Evolution session completed two features before hitting the max tool rounds limi
 **Commits:**
 - `5fa1016` Day 38: always validate after compact (not just verbose mode)
 - `f554978` Day 38: session wrap-up
+
+## Day 39 — Grep Fallback Fix & Bash Timeout Partial Output
+
+Evolution session completed two features before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Fix grep fallback to respect max_results parameter** (`7d597a0`) — The search tool falls back to grep when ripgrep is not installed. Previously this fallback ignored max_results, returning all matches. Now output lines are truncated to max_results before the 50KB truncation. 123-line test file `tests/test_grep_fallback_max_results.py` with 4 tests.
+
+2. **Capture partial output on bash command timeout** (`b4cbd20`) — When tool_bash times out, subprocess.TimeoutExpired may contain partial stdout/stderr that was produced before the timeout. Previously this was discarded entirely, making it impossible to debug slow commands. Now the partial output is captured and included in the timeout message, truncated to the usual 50KB limit. 76-line test file `tests/test_bash_timeout_partial.py` with 4 tests.
+
+**Results:** 1032 tests passing (was 1024 at start of session). 8 new tests. 2 feature commits.
+
+**Commits:**
+- `7d597a0` Day 39: fix grep fallback to respect max_results parameter
+- `b4cbd20` Day 39: capture partial output on bash command timeout
+- `d8ff7ec` Day 39: session wrap-up
