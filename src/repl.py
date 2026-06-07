@@ -3299,11 +3299,15 @@ def _format_status_output(
     return "\n".join(lines)
 
 
-def _format_providers_list(active_model: str | None = None) -> str:
+def _format_providers_list(
+    active_model: str | None = None,
+    active_provider: str | None = None,
+) -> str:
     """Format available provider presets for display.
 
     Args:
         active_model: Currently active model name, shown as highlight if matching.
+        active_provider: Currently active provider preset name (takes priority).
 
     Returns a formatted string listing all presets.
     """
@@ -3312,13 +3316,16 @@ def _format_providers_list(active_model: str | None = None) -> str:
     lines = [f"{BOLD}Available Provider Presets{RESET}"]
     for name, config in sorted(PROVIDER_PRESETS.items()):
         marker = ""
-        if active_model and config["default_model"] == active_model:
+        # Match by provider name first (exact), then by model (fuzzy)
+        if active_provider and name == active_provider:
+            marker = f" {GREEN}(active){RESET}"
+        elif not active_provider and active_model and config["default_model"] == active_model:
             marker = f" {GREEN}(active){RESET}"
         lines.append(
             f"  {CYAN}{name:12}{RESET} env: {config['env_key']:20} model: {config['default_model']}{marker}"
         )
     lines.append("")
-    lines.append(f"  {DIM}Switch with: /model <model-name>{RESET}")
+    lines.append(f"  {DIM}Switch with: /provider <name> or /model <model-name>{RESET}")
     return "\n".join(lines)
 
 
@@ -4058,7 +4065,10 @@ def _build_command_registry(
 
     @registry.register("list-providers")
     def _cmd_list_providers(line: str, ctx: dict) -> CommandResult:
-        return CommandResult(output=_format_providers_list(active_model=provider.model) + "\n")
+        return CommandResult(output=_format_providers_list(
+            active_model=provider.model,
+            active_provider=getattr(provider, '_provider_name', None),
+        ) + "\n")
 
     # ── Persistence commands ──────────────────────────────────────
 
