@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         "--provider",
         default=None,
         choices=None,
-        help="Provider preset: glm, openai, deepseek, moonshot, zhipu",
+        help="Provider preset: glm, openai, deepseek, moonshot, zhipu, anthropic, google",
     )
     parser.add_argument(
         "-v", "--verbose",
