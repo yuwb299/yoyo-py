@@ -4787,6 +4787,16 @@ for detailed help on a specific command.{RESET}""",
   /quit                Same as /exit
 
 {DIM}Session is auto-saved to .yoyo/ before exiting.{RESET}""",
+
+    "version": f"""\
+{BOLD}/version{RESET} — Show version info
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /version             Show yoyo-py version, model, and Python version
+
+{DIM}Displays the current yoyo-py version, active model name,
+and Python runtime version.{RESET}""",
 }
 
 
