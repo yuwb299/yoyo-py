@@ -46,6 +46,20 @@ PROVIDER_PRESETS: dict[str, dict[str, str]] = {
         "env_key": "GLM_API_KEY",
         "default_model": "glm-4-plus",
     },
+    "anthropic": {
+        # Anthropic doesn't expose a native OpenAI-compatible endpoint,
+        # but many proxies (LiteLLM, OpenRouter, etc.) do. Users can
+        # override --base-url for their specific proxy.
+        "base_url": "https://api.anthropic.com/v1",
+        "env_key": "ANTHROPIC_API_KEY",
+        "default_model": "claude-sonnet-4-20250514",
+    },
+    "google": {
+        # Google Gemini via OpenAI-compatible endpoint.
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "env_key": "GOOGLE_API_KEY",
+        "default_model": "gemini-2.5-pro",
+    },
 }
 
 

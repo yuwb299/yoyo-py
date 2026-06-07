@@ -142,7 +142,7 @@ _SLASH_COMMANDS = sorted([
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
     "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
-    "/config", "/list-providers", "/think", "/version", "/man",
+    "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
     "/skills", "/commands",
 ])
@@ -4000,6 +4000,62 @@ def _build_command_registry(
         )
         return CommandResult(output=output + "\n")
 
+    @registry.register("provider")
+    def _cmd_provider(line: str, ctx: dict) -> CommandResult:
+        # /provider — switch provider preset at runtime
+        args_str = line[9:].strip() if len(line) > 9 else ""
+        if not args_str:
+            current = getattr(provider, '_provider_name', None) or "custom"
+            return CommandResult(
+                output=f"{DIM}  Current provider: {current} (model: {provider.model}){RESET}\n"
+                f"{DIM}  Usage: /provider <name> [model] [--clear]{RESET}\n"
+            )
+
+        from src.provider import PROVIDER_PRESETS, resolve_provider_config
+
+        parts = args_str.split()
+        provider_name = parts[0].lower()
+        clear_history = "--clear" in parts
+
+        # Validate the provider name
+        if provider_name not in PROVIDER_PRESETS:
+            available = ", ".join(sorted(PROVIDER_PRESETS.keys()))
+            return CommandResult(
+                output=f"{YELLOW}  Unknown provider: {provider_name}{RESET}\n"
+                f"{DIM}  Available: {available}{RESET}\n"
+            )
+
+        preset = resolve_provider_config(provider_name)
+        api_key = os.getenv(preset["env_key"], "")
+
+        if not api_key:
+            return CommandResult(
+                output=f"{RED}  Error: {preset['env_key']} not set — "
+                f"export it or set it in .env{RESET}\n"
+            )
+
+        # Parse optional model override (any arg that isn't --clear or the provider name)
+        model_parts = [p for p in parts[1:] if p != "--clear" and not p.startswith("-")]
+        new_model = model_parts[0] if model_parts else preset["default_model"]
+
+        # Reconfigure the provider in-place
+        old_name = getattr(provider, '_provider_name', None) or "custom"
+        provider._provider_name = provider_name
+        provider.api_key = api_key
+        provider.base_url = preset["base_url"]
+        provider.model = new_model
+        # Recreate the OpenAI client with new credentials
+        from openai import OpenAI
+        provider.client = OpenAI(api_key=api_key, base_url=preset["base_url"])
+
+        if clear_history:
+            agent.clear()
+
+        status = f"switched to {provider_name} (model: {new_model})"
+        if clear_history:
+            status += ", history cleared"
+        return CommandResult(output=f"{GREEN}  ✓ {status}{RESET}\n")
+
     @registry.register("list-providers")
     def _cmd_list_providers(line: str, ctx: dict) -> CommandResult:
         return CommandResult(output=_format_providers_list(active_model=provider.model) + "\n")
@@ -4616,6 +4672,25 @@ any loaded skills and project context.{RESET}""",
 {DIM}Lists all built-in provider configurations (model, base URL,
 and description) that can be used with --provider flag.{RESET}""",
 
+    "provider": f"""\
+{BOLD}/provider{RESET} — Switch provider preset at runtime
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /provider                  Show current provider info
+  /provider <name>           Switch to a provider preset
+  /provider <name> <model>   Switch with a custom model
+  /provider <name> --clear   Switch and clear history
+
+{BOLD}Examples:{RESET}
+  /provider openai
+  /provider deepseek deepseek-reasoner
+  /provider glm glm-4-plus --clear
+
+{DIM}Switches the API endpoint and credentials to a different provider.
+History is preserved by default (use --clear to reset).
+Use /list-providers to see available presets.{RESET}""",
+
     "sessions": f"""\
 {BOLD}/sessions{RESET} — List saved sessions
 {DIM}───────────────────────────────────{RESET}
@@ -4780,6 +4855,7 @@ def _print_help() -> None:
     {CYAN}/config{RESET}         View/set generation parameters (temperature, max_tokens, top_p)
     {CYAN}/think [level]{RESET}  Set reasoning effort (low/medium/high/off)
     {CYAN}/list-providers{RESET}  List available provider presets
+    {CYAN}/provider <name>{RESET} Switch provider preset at runtime
 
   {BOLD}Persistence:{RESET}
     {CYAN}/save [path]{RESET}    Save session (default: .yoyo/session.json)
