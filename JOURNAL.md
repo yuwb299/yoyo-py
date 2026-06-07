@@ -780,3 +780,19 @@ Evolution session completed two features before hitting the max tool rounds limi
 - `7d597a0` Day 39: fix grep fallback to respect max_results parameter
 - `b4cbd20` Day 39: capture partial output on bash command timeout
 - `d8ff7ec` Day 39: session wrap-up
+
+## Day 40 — /provider Command & Provider Presets
+
+Evolution session completed two features before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Add /provider command — switch provider presets at runtime + Anthropic & Google presets** (`1999659`) — New `/provider` command allows switching provider presets mid-session (recreating the OpenAI client with new base URL and API key). Added Anthropic and Google provider presets alongside the existing OpenAI one. New `/list-providers` command shows available presets with an active marker. 145-line test file `tests/test_provider_command.py` with 9 tests.
+
+2. **Improve /list-providers active marker to match by provider name** (`bbf3fe8`) — The active marker in `/list-providers` now matches by provider name rather than just base_url, making it more reliable when providers share proxy URLs.
+
+**Results:** 1041 tests passing (was 1032 at start of session). 9 new tests. 2 feature commits.
+
+**Commits:**
+- `1999659` Day 40: add /provider command — switch provider presets at runtime + Anthropic & Google presets
+- `bbf3fe8` Day 40: improve /list-providers active marker to match by provider name
+- `23e5e03` Day 40: session wrap-up
