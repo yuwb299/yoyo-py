@@ -51,8 +51,26 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
 
         return _truncate(output, 50000)
 
-    except subprocess.TimeoutExpired:
-        return f"[TIMEOUT] Command timed out after {timeout}s"
+    except subprocess.TimeoutExpired as e:
+        # Capture partial output from the timeout exception — the process
+        # may have produced useful stdout/stderr before hitting the limit.
+        # e.output and e.stderr are bytes (or None) from subprocess.
+        parts = [f"[TIMEOUT] Command timed out after {timeout}s"]
+        if e.output:
+            try:
+                partial = e.output.decode("utf-8", errors="replace")
+            except AttributeError:
+                partial = str(e.output)
+            if partial.strip():
+                parts.append(f"\n--- partial stdout ---\n{partial}")
+        if e.stderr:
+            try:
+                partial_err = e.stderr.decode("utf-8", errors="replace")
+            except AttributeError:
+                partial_err = str(e.stderr)
+            if partial_err.strip():
+                parts.append(f"\n--- partial stderr ---\n{partial_err}")
+        return _truncate("\n".join(parts), 50000)
     except Exception as e:
         return f"[ERROR] {e}"
 
