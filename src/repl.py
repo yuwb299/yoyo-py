@@ -4018,7 +4018,7 @@ def _build_command_registry(
                 f"{DIM}  Usage: /provider <name> [model] [--clear]{RESET}\n"
             )
 
-        from src.provider import PROVIDER_PRESETS, resolve_provider_config
+        from .provider import PROVIDER_PRESETS, resolve_provider_config
 
         parts = args_str.split()
         provider_name = parts[0].lower()
