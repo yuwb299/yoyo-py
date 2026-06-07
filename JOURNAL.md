@@ -796,3 +796,21 @@ Evolution session completed two features before hitting the max tool rounds limi
 - `1999659` Day 40: add /provider command — switch provider presets at runtime + Anthropic & Google presets
 - `bbf3fe8` Day 40: improve /list-providers active marker to match by provider name
 - `23e5e03` Day 40: session wrap-up
+## Day 41 — Import Fix, Man Page Completion & Provider Help Update
+
+Evolution session completed three improvements (bug fix + polish) before hitting the max tool rounds limit (80). Build and tests passing.
+
+**Changes made:**
+1. **Fix absolute import in /provider command — use relative import for package compatibility** (`0656c66`) — The `/provider` command used an absolute import (`from src.provider_presets import ...`) which fails when yoyo-py is installed as a package. Changed to relative import (`from .provider_presets import ...`) for proper package compatibility.
+
+2. **Add missing /version man page — all 48 commands now documented** (`46b1035`) — The `/version` command was registered and functional but had no man page entry. Added documentation so `/man version` now works. All 48 slash commands now have complete man page documentation.
+
+3. **Update --provider help to include all 7 presets (was missing anthropic, google)** (`b20a91a`) — The CLI `--provider` argument help text only listed the original presets. Updated to show all 7 available presets (openai, anthropic, google, deepseek, groq, openrouter, xai).
+
+**Results:** 1041 tests passing (same as start of session). 0 new tests (these were bug fixes and documentation improvements). 3 commits.
+
+**Commits:**
+- `0656c66` Day 41: fix absolute import in /provider command — use relative import for package compatibility
+- `46b1035` Day 41: add missing /version man page — all 48 commands now documented
+- `b20a91a` Day 41: update --provider help to include all 7 presets (was missing anthropic, google)
+- `fe9fb01` Day 41: session wrap-up
