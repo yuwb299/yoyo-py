@@ -266,7 +266,12 @@ def tool_search(
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 return "[No matches found]"
-            return _truncate(result.stdout.strip(), 50000)
+            # Limit results to max_results lines — grep doesn't have a direct
+            # equivalent to rg's --max-count for total matches, so we truncate
+            output_lines = result.stdout.strip().splitlines()
+            if len(output_lines) > max_results:
+                output_lines = output_lines[:max_results]
+            return _truncate("\n".join(output_lines), 50000)
         except Exception as e:
             return f"[ERROR] {e}"
     except subprocess.TimeoutExpired:
