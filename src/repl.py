@@ -1427,7 +1427,9 @@ def _update_system_prompt_cwd(messages: list[dict]) -> None:
     """Update the cwd line in the system prompt after /cd.
 
     Finds the first system message and updates the 'Current working directory' line
-    so the agent's context stays fresh. Also refreshes git context.
+    so the agent's context stays fresh. Also refreshes git context and project
+    context file (removing old context and loading the appropriate file for the
+    new directory).
     """
     if not messages or messages[0].get("role") != "system":
         return
@@ -1445,36 +1447,58 @@ def _update_system_prompt_cwd(messages: list[dict]) -> None:
             break
 
     if updated:
-        # Also refresh git context section if present
-        # The git context block starts with "# Git Context" and ends at
-        # the next section header (line starting with # that isn't the header)
-        # or at the end of the content.
+        # Remove old project context and git context sections.
+        # These sections are identified by their specific headers.
+        _SECTION_HEADERS = ("# Git Context", "# Project Context")
         new_lines = []
-        skip_git = False
+        skip_section = False
         for line in lines:
-            if line.strip() == "# Git Context":
-                skip_git = True
+            stripped = line.strip()
+            if stripped.startswith(_SECTION_HEADERS):
+                skip_section = True
                 continue
-            if skip_git:
-                # Git context ends at the next section header (starts with #)
-                # but not at continuation lines like "Branch:" or "  file.py"
-                if line.startswith("#") and line.strip() != "# Git Context":
-                    skip_git = False
-                    # Insert fresh git context before this line
-                    git_ctx = _git_context()
-                    if git_ctx:
-                        new_lines.append(git_ctx)
-                    new_lines.append(line)
+            if skip_section:
+                # Section ends at a blank line followed by a line that is
+                # NOT part of the section (a non-blank, non-indented line
+                # that doesn't look like section content).
+                # Simpler approach: we know our sections always end at the
+                # next recognized section header or at content that matches
+                # the pattern of a top-level prompt line.
+                # Actually simplest: the next line starting with "Current "
+                # or another known prompt line, or a line that is just text
+                # and not indented markdown content.
+                # Safest approach: skip until we hit a line that is definitely
+                # outside the section (base prompt text or another section).
+                if stripped == "":
+                    # Blank lines might be inside or between sections.
+                    # We tentatively add them but track state.
                     continue
-                # Still inside git context — skip old lines
+                if stripped.startswith(_SECTION_HEADERS):
+                    # Another section header — handle it in next iteration
+                    skip_section = False
+                    # Re-process this line
+                    # Actually just continue the loop with skip_section reset
+                    # and let the next iteration handle it
+                    new_lines_after_skip = [line]
+                    continue
+                # Content lines within a section — skip them
                 continue
             new_lines.append(line)
 
-        # If git context was at the end and we're still skipping, add fresh context
-        if skip_git:
-            git_ctx = _git_context()
-            if git_ctx:
-                new_lines.append(git_ctx)
+        # Add fresh git context
+        git_ctx = _git_context()
+        if git_ctx:
+            new_lines.append(git_ctx)
+
+        # Add fresh project context file
+        ctx_result = _find_context_file(os.getcwd())
+        if ctx_result:
+            ctx_path, ctx_name = ctx_result
+            try:
+                ctx_content = open(ctx_path, encoding="utf-8").read()
+                new_lines.append(f"\n# Project Context ({ctx_name})\n{ctx_content}")
+            except Exception:
+                pass
 
         messages[0]["content"] = "\n".join(new_lines)
 
