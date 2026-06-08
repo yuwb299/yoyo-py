@@ -638,6 +638,21 @@ async def run_repl(
         await _run_agent_turn(agent, line)
 
 
+def _show_context_warning(agent: Agent) -> None:
+    """Show a subtle warning if context usage is high (≥60%).
+
+    This helps users understand why the agent might be losing context
+    and proactively use /compact before auto-compact kicks in.
+    """
+    est_tokens = Agent._estimate_tokens(agent.state.messages)
+    context_window = _get_context_window(agent.state.model)
+    pct = int(est_tokens / context_window * 100) if context_window > 0 else 0
+
+    if pct >= 60:
+        budget = _format_context_budget(est_tokens, context_window)
+        print(f"{DIM}  context: {budget}{RESET}")
+
+
 async def _run_agent_turn(agent: Agent, user_input: str) -> None:
     """Execute one agent turn and display results."""
     # Show context warning if usage is high — helps users avoid unexpected auto-compact

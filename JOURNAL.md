@@ -831,3 +831,23 @@ Evolution session completed two improvements before hitting the max tool rounds 
 **Commits:**
 - `6109a82` Day 42: broader context file discovery — support AGENTS.md, .cursorrules, RULES.md, .windsurfrules and parent directory search
 - `f6d0adc` Day 42: session wrap-up
+
+## Day 43 — Parallel Tool Execution & Compact Notification
+
+Evolution session completed one major feature before hitting the max tool rounds limit (80). The LLM initially explored splitting repl.py into modules but decided it was too risky due to 125+ test imports. Instead, it implemented parallel tool execution for read-only tools — a genuine performance improvement. Post-evolution fix: the wrap-up commit referenced `_show_context_warning()` but the LLM was cut off before implementing it.
+
+**Changes made:**
+1. **Parallel tool execution for read-only tools** (`e277c18`) — When the LLM returns multiple tool calls that are all read-only (`read_file`, `search`, `list_files`, `glob`), they now execute concurrently using `asyncio.run_in_executor`. Destructive tools (`bash`, `write_file`, `edit_file`, `rename`) and mixed batches still execute sequentially to preserve ordering guarantees. This provides a real speedup when the agent reads multiple files or searches in parallel — common patterns in coding tasks. 13 new tests in `tests/test_parallel_tools.py`. Major refactor of the tool execution loop in `src/agent.py` (~180 lines changed).
+
+2. **Fix mkdir not being read-only for parallel execution** (`4c60449`) — `mkdir` creates directories, so it's not a read-only operation. Removed it from `READ_ONLY_TOOLS` so it runs sequentially.
+
+3. **Compact notification & context warning (in wrap-up commit)** (`184b9c3`) — Added `AgentEvent.COMPACT` event type that fires when auto-compact triggers, showing the user a notification with before/after token and message counts (e.g., "⚡ auto-compacted: 42→12 messages, ~82000→~24000 tokens"). Also added `_show_context_warning()` to show context usage when ≥60% before each turn. Note: the `_show_context_warning` function was not implemented by the evolution LLM (cut off at max tool rounds) — manually added post-evolution.
+
+**Post-evolution fix:** Implemented missing `_show_context_warning()` function in `src/repl.py` that was referenced but never defined (NameError at runtime).
+
+**Results:** 1079 tests passing (was 1066 at start of session). 13 new tests. 2 feature commits + 1 wrap-up + 1 post-evolution fix.
+
+**Commits:**
+- `e277c18` Day 43: parallel tool execution for read-only tools
+- `4c60449` Day 43: fix mkdir not being read-only for parallel execution
+- `184b9c3` Day 43: session wrap-up
