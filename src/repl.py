@@ -645,7 +645,7 @@ def _show_context_warning(agent: Agent) -> None:
     and proactively use /compact before auto-compact kicks in.
     """
     est_tokens = Agent._estimate_tokens(agent.state.messages)
-    context_window = _get_context_window(agent.state.model)
+    context_window = _get_model_context_window(agent.provider.model)
     pct = int(est_tokens / context_window * 100) if context_window > 0 else 0
 
     if pct >= 60:
