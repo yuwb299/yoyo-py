@@ -814,3 +814,20 @@ Evolution session completed three improvements (bug fix + polish) before hitting
 - `46b1035` Day 41: add missing /version man page — all 48 commands now documented
 - `b20a91a` Day 41: update --provider help to include all 7 presets (was missing anthropic, google)
 - `fe9fb01` Day 41: session wrap-up
+
+## Day 42 — Broader Context File Discovery & Context Refresh on /cd
+
+Evolution session completed two improvements before hitting the max tool rounds limit (80). Post-evolution fix applied to the section-skip logic in `_update_system_prompt_cwd` that was incorrectly removing `# Loaded Skills` section when refreshing git/project context.
+
+**Changes made:**
+1. **Broader context file discovery — support AGENTS.md, .cursorrules, RULES.md, .windsurfrules and parent directory search** (`6109a82`) — Extended `_find_context_file()` to discover 6 context file types (YOYO.md, CLAUDE.md, AGENTS.md, .cursorrules, RULES.md, .windsurfrules) with priority ordering. Added parent directory walking (up to 10 levels) so context files are found even when working in subdirectories. New `_find_context_file()` function replaces the previous inline YOYO.md/CLAUDE.md lookup. 19 new tests in `tests/test_context_file_discovery.py`.
+
+2. **Context refresh on /cd — update project context when changing directories** (`f6d0adc`) — Added project context refresh to `_update_system_prompt_cwd()` so that `/cd` to a different project directory loads the new project's context file and removes the old one. 6 new tests in `tests/test_context_refresh_cd.py`. Post-evolution fix: the section-skip logic that removes old `# Git Context` / `# Project Context` sections was too aggressive — it also removed `# Loaded Skills` and `# Project Memories`. Fixed by using an explicit list of known section headers rather than matching any `# ` line.
+
+**Post-evolution fix:** Fixed `_update_system_prompt_cwd` section-skip logic in `src/repl.py` — replaced broad `startswith("# ")` check with explicit `_KNOWN_SECTIONS` list to avoid removing unrelated sections like `# Loaded Skills` and `# Project Memories` when the project context content contains markdown headings.
+
+**Results:** 1066 tests passing (was 1041 at start of session). 25 new tests. 2 feature commits + 1 post-evolution fix.
+
+**Commits:**
+- `6109a82` Day 42: broader context file discovery — support AGENTS.md, .cursorrules, RULES.md, .windsurfrules and parent directory search
+- `f6d0adc` Day 42: session wrap-up

@@ -1448,40 +1448,31 @@ def _update_system_prompt_cwd(messages: list[dict]) -> None:
 
     if updated:
         # Remove old project context and git context sections.
-        # These sections are identified by their specific headers.
-        _SECTION_HEADERS = ("# Git Context", "# Project Context")
+        # These are identified by headers starting with "# Git Context" or
+        # "# Project Context". A section runs from its header until the next
+        # known section header or end of content.
+        _REMOVE_SECTIONS = ("# Git Context", "# Project Context")
+        # Known section headers that signal the start of a new section
+        _KNOWN_SECTIONS = (
+            "# Git Context", "# Project Context", "# Loaded Skills",
+            "# Project Memories",
+        )
         new_lines = []
         skip_section = False
         for line in lines:
             stripped = line.strip()
-            if stripped.startswith(_SECTION_HEADERS):
+            if stripped.startswith(_REMOVE_SECTIONS):
                 skip_section = True
                 continue
             if skip_section:
-                # Section ends at a blank line followed by a line that is
-                # NOT part of the section (a non-blank, non-indented line
-                # that doesn't look like section content).
-                # Simpler approach: we know our sections always end at the
-                # next recognized section header or at content that matches
-                # the pattern of a top-level prompt line.
-                # Actually simplest: the next line starting with "Current "
-                # or another known prompt line, or a line that is just text
-                # and not indented markdown content.
-                # Safest approach: skip until we hit a line that is definitely
-                # outside the section (base prompt text or another section).
-                if stripped == "":
-                    # Blank lines might be inside or between sections.
-                    # We tentatively add them but track state.
-                    continue
-                if stripped.startswith(_SECTION_HEADERS):
-                    # Another section header — handle it in next iteration
+                # End the skip when we hit a known section header that
+                # isn't one we're removing (e.g. "# Loaded Skills")
+                if any(stripped.startswith(h) for h in _KNOWN_SECTIONS
+                       if not stripped.startswith(_REMOVE_SECTIONS)):
                     skip_section = False
-                    # Re-process this line
-                    # Actually just continue the loop with skip_section reset
-                    # and let the next iteration handle it
-                    new_lines_after_skip = [line]
+                    new_lines.append(line)
                     continue
-                # Content lines within a section — skip them
+                # Still inside a section we want to remove — skip this line
                 continue
             new_lines.append(line)
 
