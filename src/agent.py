@@ -57,7 +57,7 @@ class Agent:
     # When ALL tool calls in a batch are read-only, they run in parallel
     # via asyncio thread pool. If any destructive tool is present, all run
     # sequentially to preserve ordering guarantees.
-    READ_ONLY_TOOLS = {"read_file", "search", "list_files", "glob", "mkdir"}
+    READ_ONLY_TOOLS = {"read_file", "search", "list_files", "glob"}
 
     def __init__(
         self,
