@@ -640,6 +640,9 @@ async def run_repl(
 
 async def _run_agent_turn(agent: Agent, user_input: str) -> None:
     """Execute one agent turn and display results."""
+    # Show context warning if usage is high — helps users avoid unexpected auto-compact
+    _show_context_warning(agent)
+
     in_text = False
 
     # Set up Ctrl+C handler during agent execution
@@ -680,6 +683,16 @@ async def _run_agent_turn(agent: Agent, user_input: str) -> None:
                     preview = _format_tool_output_preview(data.get("output"), max_len=150)
                     if preview:
                         print(f"    {DIM}{preview}{RESET}")
+
+            elif event_type == AgentEvent.COMPACT:
+                if in_text:
+                    print()
+                    in_text = False
+                info = data
+                print(
+                    f"{DIM}  ⚡ auto-compacted: {info['old_count']}→{info['new_count']} messages, "
+                    f"~{info['old_tokens']}→~{info['new_tokens']} tokens{RESET}\n"
+                )
 
             elif event_type == AgentEvent.DONE:
                 if in_text:

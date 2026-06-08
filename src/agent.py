@@ -19,6 +19,7 @@ class AgentEvent(Enum):
     DONE = "done"              # Agent turn complete
     ERROR = "error"            # Error occurred
     INTERRUPTED = "interrupted"  # User interrupted via Ctrl+C
+    COMPACT = "compact"        # Context auto-compacted (data = before/after token counts)
 
 
 @dataclass
@@ -123,7 +124,11 @@ class Agent:
             # Auto-compact: if context is too long, summarize old messages
             # This prevents token limit errors on long conversations
             if self._should_compact(self.state.messages, max_tokens=self.state.compact_threshold):
+                old_tokens = Agent._estimate_tokens(self.state.messages)
+                old_count = len(self.state.messages)
                 self.state.messages = self._compact_messages(self.state.messages)
+                new_tokens = Agent._estimate_tokens(self.state.messages)
+                new_count = len(self.state.messages)
                 # Always validate compacted messages — _compact_messages has had
                 # 3 bugs in 37 days (Days 5, 18, 37). Silent corruption is worse
                 # than a visible warning, so we always check.
@@ -131,6 +136,14 @@ class Agent:
                 if issues:
                     import sys
                     print(f"[compact validation] {issues}", file=sys.stderr)
+                # Notify the user that auto-compact happened — they should know
+                # why earlier context was lost
+                yield (AgentEvent.COMPACT, {
+                    "old_tokens": old_tokens,
+                    "new_tokens": new_tokens,
+                    "old_count": old_count,
+                    "new_count": new_count,
+                })
 
             try:
                 response = self.provider.chat(
