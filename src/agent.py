@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from enum import Enum
@@ -51,6 +52,12 @@ class Agent:
 
     # Tools that modify state and should require user confirmation
     DESTRUCTIVE_TOOLS = {"bash", "write_file", "edit_file", "rename"}
+
+    # Tools that only read data — safe to execute concurrently for speed.
+    # When ALL tool calls in a batch are read-only, they run in parallel
+    # via asyncio thread pool. If any destructive tool is present, all run
+    # sequentially to preserve ordering guarantees.
+    READ_ONLY_TOOLS = {"read_file", "search", "list_files", "glob", "mkdir"}
 
     def __init__(
         self,
@@ -269,135 +276,212 @@ class Agent:
             # placeholders for unanswered ones on interrupt
             answered_tool_ids: set[str] = set()
 
-            # Execute tool calls
+            # ── Phase 1: Parse all tool call arguments ──────────────
+            # Parse args and check for malformed JSON before any execution.
+            # This lets us decide whether to run in parallel or sequential.
+            parsed_calls: list[tuple[dict, str, dict | None, str | None]] = []
+            # Each entry: (tc_raw, tool_name, tool_args_or_None, error_msg_or_None)
+            all_read_only = True
+            needs_permission = False
             for tc in tool_calls_list:
+                tool_name = tc["function"]["name"]
+                tool_args_str = tc["function"]["arguments"]
+                if tool_name not in self.READ_ONLY_TOOLS:
+                    all_read_only = False
+                if (self.confirm_fn is not None
+                        and tool_name in self.DESTRUCTIVE_TOOLS):
+                    needs_permission = True
+                try:
+                    tool_args = json.loads(tool_args_str)
+                except json.JSONDecodeError:
+                    if not tool_args_str:
+                        tool_args = {}
+                    else:
+                        parsed_calls.append((tc, tool_name, None,
+                            f"Malformed JSON in tool arguments: {tool_args_str!r}"))
+                        continue
+                parsed_calls.append((tc, tool_name, tool_args, None))
+
+            # ── Phase 2: Execute tools ──────────────────────────────
+            # Run read-only tools in parallel for speed (e.g. reading 3 files
+            # at once). Fall back to sequential when destructive tools or
+            # permission checks are involved.
+            can_parallel = (
+                all_read_only
+                and not needs_permission
+                and not self._interrupted
+                and len([p for p in parsed_calls if p[2] is not None]) > 1
+            )
+
+            if can_parallel:
+                # Parallel execution: yield TOOL_START for all, then execute
+                # concurrently, then yield TOOL_END in order.
+                executable = []
+                for tc, tool_name, tool_args, err in parsed_calls:
+                    if self._interrupted:
+                        break
+                    tool_call_id = tc["id"]
+                    if err is not None:
+                        # Malformed args — yield error immediately
+                        yield (AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": err, "is_error": True})
+                        self.state.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": err,
+                        })
+                        answered_tool_ids.add(tool_call_id)
+                        continue
+                    yield (AgentEvent.TOOL_START, {"name": tool_name, "args": tool_args})
+                    if tool_name in self.tools:
+                        executable.append((tc, tool_name, tool_args, tool_call_id))
+                    else:
+                        unknown_msg = f"Unknown tool: {tool_name}"
+                        yield (AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": unknown_msg, "is_error": True})
+                        self.state.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": unknown_msg,
+                        })
+                        answered_tool_ids.add(tool_call_id)
+
+                if executable and not self._interrupted:
+                    # Run all executable tools concurrently in a thread pool
+                    loop = asyncio.get_event_loop()
+                    async def _run_one(tc, tool_name, tool_args, tool_call_id):
+                        try:
+                            result = await loop.run_in_executor(
+                                None, lambda: self.tools[tool_name](**tool_args))
+                            return (tool_name, tool_call_id, str(result), False, None)
+                        except TypeError as e:
+                            error_msg = f"Error executing {tool_name}: {e} (args received: {tool_args})"
+                            return (tool_name, tool_call_id, error_msg, True, None)
+                        except Exception as e:
+                            error_msg = f"Error executing {tool_name}: {e}"
+                            return (tool_name, tool_call_id, error_msg, True, None)
+
+                    results = await asyncio.gather(*[
+                        _run_one(*args) for args in executable
+                    ])
+
+                    # Yield results in original order
+                    for tool_name, tool_call_id, output, is_error, _ in results:
+                        if self._interrupted:
+                            break
+                        yield (AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": output, "is_error": is_error})
+                        self.state.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": output,
+                        })
+                        answered_tool_ids.add(tool_call_id)
+
+                # Fill interrupted tool placeholders if needed
                 if self._interrupted:
-                    # Fill placeholder error messages for unanswered tool_calls
-                    # so the conversation stays valid (APIs reject unmatched tool_call_ids)
                     unanswered = [
                         t for t in tool_calls_list
                         if t["id"] not in answered_tool_ids
                     ]
                     for t in unanswered:
-                        err = f"Tool execution skipped: interrupted"
                         self.state.messages.append({
                             "role": "tool",
                             "tool_call_id": t["id"],
-                            "content": err,
+                            "content": "Tool execution skipped: interrupted",
                         })
                     yield (AgentEvent.INTERRUPTED, None)
                     return
-
-                tool_name = tc["function"]["name"]
-                tool_args_str = tc["function"]["arguments"]
-                tool_call_id = tc["id"]
-
-                try:
-                    tool_args = json.loads(tool_args_str)
-                except json.JSONDecodeError:
-                    if not tool_args_str:
-                        # Empty or None args — common when API sends no arguments
-                        # for tools with all-optional params (e.g. list_files)
-                        tool_args = {}
-                    else:
-                        # Truly malformed JSON — include the raw string so the LLM
-                        # can see what went wrong and correct its output
-                        error_msg = (
-                            f"Malformed JSON in tool arguments: {tool_args_str!r}"
-                        )
-                        yield (
-                            AgentEvent.TOOL_END,
-                            {"name": tool_name, "output": error_msg, "is_error": True},
-                        )
-                        self.state.messages.append(
-                            {
+            else:
+                # Sequential execution (original behavior) — used when
+                # destructive tools or permission checks are involved
+                for tc, tool_name, tool_args, err in parsed_calls:
+                    if self._interrupted:
+                        unanswered = [
+                            t for t in tool_calls_list
+                            if t["id"] not in answered_tool_ids
+                        ]
+                        for t in unanswered:
+                            self.state.messages.append({
                                 "role": "tool",
-                                "tool_call_id": tool_call_id,
-                                "content": error_msg,
-                            }
-                        )
+                                "tool_call_id": t["id"],
+                                "content": "Tool execution skipped: interrupted",
+                            })
+                        yield (AgentEvent.INTERRUPTED, None)
+                        return
+
+                    tool_call_id = tc["id"]
+
+                    if err is not None:
+                        # Malformed JSON args
+                        yield (AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": err, "is_error": True})
+                        self.state.messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call_id,
+                            "content": err,
+                        })
                         answered_tool_ids.add(tool_call_id)
                         continue
 
-                yield (AgentEvent.TOOL_START, {"name": tool_name, "args": tool_args})
+                    yield (AgentEvent.TOOL_START, {"name": tool_name, "args": tool_args})
 
-                # Permission check: confirm_fn can deny destructive tools
-                if (self.confirm_fn is not None
-                        and tool_name in self.DESTRUCTIVE_TOOLS
-                        and not self.confirm_fn(tool_name, tool_args)):
-                    denied_msg = f"Permission denied: {tool_name} was not approved by user"
-                    yield (
-                        AgentEvent.TOOL_END,
-                        {"name": tool_name, "output": denied_msg, "is_error": True},
-                    )
-                    self.state.messages.append(
-                        {
+                    # Permission check: confirm_fn can deny destructive tools
+                    if (self.confirm_fn is not None
+                            and tool_name in self.DESTRUCTIVE_TOOLS
+                            and not self.confirm_fn(tool_name, tool_args)):
+                        denied_msg = f"Permission denied: {tool_name} was not approved by user"
+                        yield (AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": denied_msg, "is_error": True})
+                        self.state.messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call_id,
                             "content": denied_msg,
-                        }
-                    )
-                    answered_tool_ids.add(tool_call_id)
-                    continue
+                        })
+                        answered_tool_ids.add(tool_call_id)
+                        continue
 
-                if tool_name in self.tools:
-                    try:
-                        result = self.tools[tool_name](**tool_args)
-                        yield (
-                            AgentEvent.TOOL_END,
-                            {"name": tool_name, "output": str(result), "is_error": False},
-                        )
-                        self.state.messages.append(
-                            {
+                    if tool_name in self.tools:
+                        try:
+                            result = self.tools[tool_name](**tool_args)
+                            yield (AgentEvent.TOOL_END,
+                                {"name": tool_name, "output": str(result), "is_error": False})
+                            self.state.messages.append({
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": str(result),
-                            }
-                        )
-                        answered_tool_ids.add(tool_call_id)
-                    except TypeError as e:
-                        # Missing or wrong arguments — common when LLM sends malformed JSON
-                        error_msg = f"Error executing {tool_name}: {e} (args received: {tool_args})"
-                        yield (
-                            AgentEvent.TOOL_END,
-                            {"name": tool_name, "output": error_msg, "is_error": True},
-                        )
-                        self.state.messages.append(
-                            {
+                            })
+                            answered_tool_ids.add(tool_call_id)
+                        except TypeError as e:
+                            error_msg = f"Error executing {tool_name}: {e} (args received: {tool_args})"
+                            yield (AgentEvent.TOOL_END,
+                                {"name": tool_name, "output": error_msg, "is_error": True})
+                            self.state.messages.append({
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": error_msg,
-                            }
-                        )
-                        answered_tool_ids.add(tool_call_id)
-                    except Exception as e:
-                        error_msg = f"Error executing {tool_name}: {e}"
-                        yield (
-                            AgentEvent.TOOL_END,
-                            {"name": tool_name, "output": error_msg, "is_error": True},
-                        )
-                        self.state.messages.append(
-                            {
+                            })
+                            answered_tool_ids.add(tool_call_id)
+                        except Exception as e:
+                            error_msg = f"Error executing {tool_name}: {e}"
+                            yield (AgentEvent.TOOL_END,
+                                {"name": tool_name, "output": error_msg, "is_error": True})
+                            self.state.messages.append({
                                 "role": "tool",
                                 "tool_call_id": tool_call_id,
                                 "content": error_msg,
-                            }
-                        )
-                        answered_tool_ids.add(tool_call_id)
-                else:
-                    unknown_msg = f"Unknown tool: {tool_name}"
-                    yield (
-                        AgentEvent.TOOL_END,
-                        {"name": tool_name, "output": unknown_msg, "is_error": True},
-                    )
-                    self.state.messages.append(
-                        {
+                            })
+                            answered_tool_ids.add(tool_call_id)
+                    else:
+                        unknown_msg = f"Unknown tool: {tool_name}"
+                        yield (AgentEvent.TOOL_END,
+                            {"name": tool_name, "output": unknown_msg, "is_error": True})
+                        self.state.messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call_id,
                             "content": unknown_msg,
-                        }
-                    )
-                    answered_tool_ids.add(tool_call_id)
+                        })
+                        answered_tool_ids.add(tool_call_id)
 
         # Safety: exceeded max rounds — append assistant message so conversation stays valid
         max_rounds_msg = f"Exceeded max tool rounds ({self.state.max_tool_rounds})"
