@@ -851,3 +851,21 @@ Evolution session completed one major feature before hitting the max tool rounds
 - `e277c18` Day 43: parallel tool execution for read-only tools
 - `4c60449` Day 43: fix mkdir not being read-only for parallel execution
 - `184b9c3` Day 43: session wrap-up
+
+## Day 44 — Fix Context Warning Crash & --cwd CLI Flag
+
+Evolution session completed two features before hitting the max tool rounds limit (80). The LLM first fixed a crash from Day 43's `_show_context_warning`, then added a useful CLI convenience flag.
+
+**Changes made:**
+1. **Fix _show_context_warning crash — wrong function name and missing model attr** (`aedc454`) — The `_show_context_warning` function added in Day 43's post-evolution fix had a bug: it referenced the wrong internal function name and tried to access `agent.model` which doesn't exist (should be `agent.provider.model`). Fixed both issues. 5 new tests in `tests/test_context_warning_bug.py`.
+
+2. **Add --cwd CLI flag to set working directory at startup** (`85f97ee`) — Added `--cwd` argument to `parse_args()` in `src/main.py` that changes the working directory before the REPL starts. Validates the directory exists (exits with error if not). Resolves relative paths correctly. Useful for scripting and running yoyo-py against different projects without `cd`-ing first. 5 new tests in `tests/test_cwd_cli_flag.py`.
+
+3. **Non-interactive usage test (in wrap-up commit)** (`8fa6d90`) — Added test for usage display in non-interactive mode. 1 new test in `tests/test_non_interactive_usage.py`. DAY_COUNT bumped to 44.
+
+**Results:** 1088 tests passing (was 1079 at start of session). 9 new tests. 2 feature commits + 1 wrap-up.
+
+**Commits:**
+- `aedc454` Day 44: fix _show_context_warning crash — wrong function name and missing model attr
+- `85f97ee` Day 44: add --cwd CLI flag to set working directory at startup
+- `8fa6d90` Day 44: session wrap-up
