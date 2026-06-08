@@ -393,6 +393,46 @@ def print_usage(usage) -> None:
         print(f"\n{DIM}  tokens: {usage}{RESET}")
 
 
+# Context file names in priority order — first match wins.
+# Covers the major AI coding agent conventions so yoyo-py can work
+# with projects that already have instructions for other tools.
+_CONTEXT_FILE_NAMES = (
+    "YOYO.md",
+    "CLAUDE.md",
+    "AGENTS.md",
+    "RULES.md",
+    ".cursorrules",
+    ".windsurfrules",
+)
+
+# Maximum parent directory levels to walk up when searching for context files.
+_CONTEXT_SEARCH_MAX_DEPTH = 10
+
+
+def _find_context_file(cwd: str) -> tuple[str, str] | None:
+    """Find the best context file for the given working directory.
+
+    Searches for known context file names (YOYO.md, CLAUDE.md, AGENTS.md,
+    .cursorrules, RULES.md, .windsurfrules) in priority order. Looks in the
+    current directory first, then walks up parent directories up to
+    _CONTEXT_SEARCH_MAX_DEPTH levels.
+
+    Returns (file_path, file_name) if found, else None.
+    """
+    current = Path(cwd).resolve()
+    for _ in range(_CONTEXT_SEARCH_MAX_DEPTH + 1):
+        for name in _CONTEXT_FILE_NAMES:
+            candidate = current / name
+            if candidate.is_file():
+                return (str(candidate), name)
+        parent = current.parent
+        if parent == current:
+            # Reached filesystem root
+            break
+        current = parent
+    return None
+
+
 def load_system_prompt(skills: SkillSet | None = None) -> str:
     """Build the system prompt from base + skills + project context."""
     from datetime import datetime
@@ -413,16 +453,16 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
     if git_ctx:
         parts.append(git_ctx)
 
-    # Load YOYO.md or CLAUDE.md if present
-    for ctx_file in ("YOYO.md", "CLAUDE.md"):
-        ctx_path = os.path.join(os.getcwd(), ctx_file)
-        if os.path.exists(ctx_path):
-            try:
-                content = open(ctx_path, encoding="utf-8").read()
-                parts.append(f"\n# Project Context ({ctx_file})\n{content}")
-                break
-            except Exception:
-                pass
+    # Discover project context files (YOYO.md, CLAUDE.md, AGENTS.md, .cursorrules, etc.)
+    # Searches current dir first, then walks up parent dirs (up to 10 levels).
+    ctx_result = _find_context_file(os.getcwd())
+    if ctx_result:
+        ctx_path, ctx_name = ctx_result
+        try:
+            content = open(ctx_path, encoding="utf-8").read()
+            parts.append(f"\n# Project Context ({ctx_name})\n{content}")
+        except Exception:
+            pass
 
     # Add skills
     if skills and not skills.is_empty():
