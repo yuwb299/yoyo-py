@@ -100,6 +100,11 @@ def parse_args() -> argparse.Namespace:
         help="Resume last auto-saved session on startup",
     )
     parser.add_argument(
+        "--cwd",
+        default=None,
+        help="Change working directory before starting (useful for scripting)",
+    )
+    parser.add_argument(
         "--list-providers",
         action="store_true",
         help="List available provider presets and exit",
@@ -122,6 +127,14 @@ def _print_providers() -> None:
 
 def main() -> None:
     args = parse_args()
+
+    # Change working directory early so provider, skills, etc. all resolve correctly
+    if args.cwd:
+        cwd = os.path.abspath(args.cwd)
+        if not os.path.isdir(cwd):
+            print(f"Error: --cwd directory not found: {cwd}", file=sys.stderr)
+            sys.exit(1)
+        os.chdir(cwd)
 
     if args.list_providers:
         _print_providers()
