@@ -2817,70 +2817,12 @@ def _estimate_cost(usage: Usage, model: str) -> str:
 
 # ── Context window budget ──────────────────────────────────────────────
 
-# Context window sizes in tokens for known models.
-# Used to show budget warnings when approaching limits.
-_MODEL_CONTEXT_WINDOWS: dict[str, int] = {
-    # GLM models (Zhipu AI)
-    "glm-5": 128000,
-    "glm-5.1": 128000,
-    "glm-4-plus": 128000,
-    "glm-4": 128000,
-    "glm-4-flash": 128000,
-    # OpenAI models (GPT-4.x)
-    "gpt-4.1": 1047576,        # 1M context (2025-04)
-    "gpt-4.1-mini": 1047576,   # 1M context (2025-04)
-    "gpt-4.1-nano": 1047576,   # 1M context (2025-04)
-    "gpt-4o": 128000,
-    "gpt-4o-mini": 128000,
-    "gpt-4-turbo": 128000,
-    # OpenAI models (o-series reasoning)
-    "o1": 200000,
-    "o1-mini": 128000,
-    "o3": 200000,              # 200K context (2025-04)
-    "o3-mini": 200000,         # 200K context (2025-01)
-    "o4-mini": 200000,         # 200K context (2025-04)
-    # Anthropic models (Claude)
-    "claude-opus-4": 200000,   # 200K context (2025-05)
-    "claude-sonnet-4": 200000, # 200K context (2025-05)
-    "claude-3-7-sonnet": 200000,
-    "claude-3-5-sonnet": 200000,
-    "claude-3-opus": 200000,
-    "claude-3-haiku": 200000,
-    # Google models (Gemini)
-    "gemini-2.5-pro": 1048576,  # 1M context (2025-03)
-    "gemini-2.5-flash": 1048576, # 1M context (2025-04)
-    "gemini-2.0-flash": 1048576, # 1M context
-    # DeepSeek models
-    "deepseek-chat": 64000,
-    "deepseek-reasoner": 64000,
-    "deepseek-v3": 128000,     # V3 expanded to 128K
-    "deepseek-r1": 128000,     # R1 expanded to 128K
-    # Moonshot models
-    "moonshot-v1-8k": 8192,
-    "moonshot-v1-32k": 32768,
-    "moonshot-v1-128k": 131072,
-}
+from .provider import get_model_context_window, MODEL_CONTEXT_WINDOWS, DEFAULT_CONTEXT_WINDOW
 
-_DEFAULT_CONTEXT_WINDOW = 128000
-
-
-def _get_model_context_window(model: str) -> int:
-    """Get the context window size for a model.
-
-    Handles version suffixes by trying prefix matching.
-    E.g. 'gpt-4o-2024-05-13' matches 'gpt-4o'.
-
-    Returns the context window in tokens, or a default if unknown.
-    """
-    if model in _MODEL_CONTEXT_WINDOWS:
-        return _MODEL_CONTEXT_WINDOWS[model]
-
-    # Try prefix matching: longer prefixes first for specificity
-    for prefix in sorted(_MODEL_CONTEXT_WINDOWS.keys(), key=len, reverse=True):
-        if model.startswith(prefix):
-            return _MODEL_CONTEXT_WINDOWS[prefix]
-
-    return _DEFAULT_CONTEXT_WINDOW
+# Backward-compatible aliases for internal repl.py code that used the old private names
+_MODEL_CONTEXT_WINDOWS = MODEL_CONTEXT_WINDOWS
+_DEFAULT_CONTEXT_WINDOW = DEFAULT_CONTEXT_WINDOW
+_get_model_context_window = get_model_context_window
 
 
 def _format_context_budget(used_tokens: int, context_window: int) -> str:

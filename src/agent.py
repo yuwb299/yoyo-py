@@ -37,7 +37,7 @@ class AgentState:
     messages: list[dict[str, Any]] = field(default_factory=list)
     usage: Usage = field(default_factory=Usage)
     max_tool_rounds: int = 20  # Safety: max tool-calling rounds per prompt
-    compact_threshold: int = 80000  # Token estimate threshold for auto-compact
+    compact_threshold: int = 76800  # 60% of 128K default; updated dynamically by Agent
 
 
 class Agent:
@@ -102,6 +102,28 @@ class Agent:
         self.tools[name] = func
         self.tool_schemas.append(schema)
 
+    @staticmethod
+    def _compute_compact_threshold(model: str) -> int:
+        """Compute compact threshold as 60% of the model's context window.
+
+        This ensures:
+        - Small models (8K) compact early, avoiding API errors
+        - Large models (1M+) compact late, preserving valuable context
+        """
+        from .provider import get_model_context_window
+        ctx = get_model_context_window(model)
+        return int(ctx * 0.6)
+
+    def _update_compact_threshold(self) -> None:
+        """Update compact_threshold based on current model.
+
+        Called when the model changes (e.g. /model command) so the
+        compact trigger adapts to the new model's context window.
+        """
+        model = getattr(self.provider, "model", None)
+        if model:
+            self.state.compact_threshold = self._compute_compact_threshold(model)
+
     async def prompt(self, user_input: str) -> None:
         """Run one user prompt through the agent loop.
 
@@ -115,6 +137,10 @@ class Agent:
         """
         self._interrupted = False
         self.state.messages.append({"role": "user", "content": user_input})
+
+        # Update compact threshold to match current model (in case model changed
+        # via /model command since last prompt)
+        self._update_compact_threshold()
 
         for round_num in range(self.state.max_tool_rounds):
             if self._interrupted:

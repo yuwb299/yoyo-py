@@ -20,6 +20,75 @@ from openai import OpenAI
 # Any OpenAI-compatible API can be used by setting --base-url and the
 # appropriate API key environment variable directly.
 
+# ── Model context windows ──────────────────────────────────────────────
+# Context window sizes in tokens for known models.
+# Used for budget warnings and adaptive compact thresholds.
+# Shared between provider.py, agent.py, and repl.py.
+
+MODEL_CONTEXT_WINDOWS: dict[str, int] = {
+    # GLM models (Zhipu AI)
+    "glm-5": 128000,
+    "glm-5.1": 128000,
+    "glm-4-plus": 128000,
+    "glm-4": 128000,
+    "glm-4-flash": 128000,
+    # OpenAI models (GPT-4.x)
+    "gpt-4.1": 1047576,        # 1M context (2025-04)
+    "gpt-4.1-mini": 1047576,   # 1M context (2025-04)
+    "gpt-4.1-nano": 1047576,   # 1M context (2025-04)
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "gpt-4-turbo": 128000,
+    # OpenAI models (o-series reasoning)
+    "o1": 200000,
+    "o1-mini": 128000,
+    "o3": 200000,              # 200K context (2025-04)
+    "o3-mini": 200000,         # 200K context (2025-01)
+    "o4-mini": 200000,         # 200K context (2025-04)
+    # Anthropic models (Claude)
+    "claude-opus-4": 200000,   # 200K context (2025-05)
+    "claude-sonnet-4": 200000, # 200K context (2025-05)
+    "claude-3-7-sonnet": 200000,
+    "claude-3-5-sonnet": 200000,
+    "claude-3-opus": 200000,
+    "claude-3-haiku": 200000,
+    # Google models (Gemini)
+    "gemini-2.5-pro": 1048576,  # 1M context (2025-03)
+    "gemini-2.5-flash": 1048576, # 1M context (2025-04)
+    "gemini-2.0-flash": 1048576, # 1M context
+    # DeepSeek models
+    "deepseek-chat": 64000,
+    "deepseek-reasoner": 64000,
+    "deepseek-v3": 128000,     # V3 expanded to 128K
+    "deepseek-r1": 128000,     # R1 expanded to 128K
+    # Moonshot models
+    "moonshot-v1-8k": 8192,
+    "moonshot-v1-32k": 32768,
+    "moonshot-v1-128k": 131072,
+}
+
+DEFAULT_CONTEXT_WINDOW = 128000
+
+
+def get_model_context_window(model: str) -> int:
+    """Get the context window size for a model.
+
+    Handles version suffixes by trying prefix matching.
+    E.g. 'gpt-4o-2024-05-13' matches 'gpt-4o'.
+
+    Returns the context window in tokens, or a default if unknown.
+    """
+    if model in MODEL_CONTEXT_WINDOWS:
+        return MODEL_CONTEXT_WINDOWS[model]
+
+    # Try prefix matching: longer prefixes first for specificity
+    for prefix in sorted(MODEL_CONTEXT_WINDOWS.keys(), key=len, reverse=True):
+        if model.startswith(prefix):
+            return MODEL_CONTEXT_WINDOWS[prefix]
+
+    return DEFAULT_CONTEXT_WINDOW
+
+
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "glm": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
