@@ -4381,7 +4381,16 @@ def _build_command_registry(
         keep_history = "--keep" in model_args
         new_model = model_args.replace("--keep", "").strip()
         if not new_model:
-            return CommandResult(output=f"{YELLOW}Usage: /model <name> [--keep]{RESET}\n")
+            # Show current model info and context window
+            from .provider import get_model_context_window
+            ctx_window = get_model_context_window(provider.model)
+            threshold = Agent._compute_compact_threshold(provider.model)
+            return CommandResult(
+                output=f"{DIM}  Current model: {provider.model}{RESET}\n"
+                f"{DIM}  Context window: {ctx_window:,} tokens{RESET}\n"
+                f"{DIM}  Compact threshold: {threshold:,} tokens (60%){RESET}\n"
+                f"{DIM}  Usage: /model <name> [--keep]{RESET}\n"
+            )
         provider.model = new_model
         if keep_history:
             return CommandResult(output=f"{DIM}  (switched to {new_model}, history preserved){RESET}\n")
