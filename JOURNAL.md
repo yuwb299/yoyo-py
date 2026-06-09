@@ -1,5 +1,24 @@
 # Journal
 
+## Day 46 — Dynamic Compact Threshold, /model Info, Tab Completions
+
+Evolution session completed three features before hitting the max tool rounds limit (80). The LLM identified that the hardcoded 80K compact_threshold was suboptimal for both small-context models (8K, where auto-compact never triggers before hitting API limits) and large-context models (1M+, where compaction fires far too early and wastes context).
+
+**Changes made:**
+1. **Dynamic compact threshold adapts to model context window** (`0add711`) — Moved `MODEL_CONTEXT_WINDOWS` dict and `get_model_context_window()` from `repl.py` to `provider.py` (shared module). Agent's `compact_threshold` is now computed as 60% of the model's context window, auto-updating before each prompt turn. Small models (8K) compact early to avoid API errors; large models (1M+) compact late to preserve context. `repl.py` uses backward-compatible aliases for the old private names. 8 new tests in `tests/test_dynamic_compact_threshold.py`.
+
+2. **/model without args shows current model info + context window** (`1377eb5`) — Instead of just showing usage, `/model` now displays the current model name, context window size, and compact threshold. Helps users understand how their model choice affects context management. 10 lines changed in `src/repl.py`.
+
+3. **Tab completion for /model, /provider, and /think commands** (`be92f6a`) — `/model` now tab-completes from known model names (context window table); `/provider` tab-completes provider preset names (glm, openai, deepseek, etc.); `/think` tab-completes low/medium/high options. 11 new tests in `tests/test_model_provider_completion.py`.
+
+**Results:** 1136 tests passing (was 1125 at start of session). 19 new tests. 3 feature commits + 1 wrap-up.
+
+**Commits:**
+- `0add711` Day 46: Dynamic compact threshold adapts to model context window
+- `1377eb5` Day 46: /model without args shows current model info + context window
+- `be92f6a` Day 46: Tab completion for /model, /provider, and /think commands
+- `5e400f3` Day 46: session wrap-up
+
 ## Day 45 — Context Window Table Update, /selfassess Command
 
 Updated the model context window table with 12 new entries for 2025 models (GPT-4.1/mini/nano, o3/o3-mini/o4-mini, Claude Opus 4/Sonnet 4/3.7/3.5/3, Gemini 2.5 Pro/Flash, DeepSeek V3/R1). This ensures budget warnings work correctly when using any modern model. Added 20 tests for the new entries.
