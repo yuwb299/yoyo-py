@@ -4512,6 +4512,20 @@ cargo test, go test, npm test, or mvn test.{RESET}""",
   Go:     go test + go vet
   Java:   mvn test{RESET}""",
 
+    "selfassess": f"""\
+{BOLD}/selfassess{RESET} — Run a self-diagnostic report
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /selfassess          Show a self-assessment report
+
+{DIM}Shows:
+  • Code statistics (source/test files and lines)
+  • Test results (pytest summary)
+  • Known issues (TODOs/FIXMEs/HACKs in src/)
+  • Git info (branch, recent commits)
+  • Model info (context window table){RESET}""",
+
     "fix": f"""\
 {BOLD}/fix{RESET} — Auto-fix lint/format errors
 {DIM}───────────────────────────────────{RESET}
@@ -5101,6 +5115,7 @@ def _print_help() -> None:
     {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
     {CYAN}/edit <file>{RESET}    Open file in $EDITOR (default: vim)
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
+    {CYAN}/selfassess{RESET}     Self-diagnostic report (code stats, tests, TODOs, git)
     {CYAN}/test{RESET}           Run project tests (optional: /test <file> or /test -k pattern)
     {CYAN}/fix{RESET}            Auto-fix lint/format errors
 
