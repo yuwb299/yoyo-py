@@ -140,7 +140,7 @@ _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
-    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit",
+    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
@@ -2259,6 +2259,72 @@ def _run_test_command(workdir: str | None = None, args: str = "") -> str:
         return f"{DIM}No recognized project type found — can't determine test command{RESET}"
 
 
+def _run_cat_command(args: str) -> str:
+    """Quick file viewer — display file content with line numbers.
+
+    Usage: /cat <file> [offset] [limit]
+
+    Supports optional line range:
+      /cat foo.py         Show entire file (up to 500 lines)
+      /cat foo.py 10 20   Show lines 10-29 (offset 10, limit 20)
+    """
+    parts = args.strip().split()
+
+    if not parts:
+        return f"{YELLOW}Usage: /cat <file> [offset] [limit]{RESET}"
+
+    filepath = parts[0]
+    offset = int(parts[1]) if len(parts) > 1 else 1
+    limit = int(parts[2]) if len(parts) > 2 else 500
+
+    p = Path(filepath)
+    if not p.exists():
+        return f"{RED}  File not found: {filepath}{RESET}"
+    if not p.is_file():
+        return f"{RED}  Not a file: {filepath}{RESET}"
+
+    # Check for binary file
+    try:
+        chunk = p.open("rb").read(8192)
+        if b"\x00" in chunk:
+            return f"{RED}  Binary file, cannot display: {filepath}{RESET}"
+    except OSError:
+        pass
+
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as e:
+        return f"{RED}  Error reading file: {e}{RESET}"
+
+    total = len(lines)
+
+    # Clamp offset to valid range
+    if offset < 1:
+        offset = 1
+    if offset > total:
+        return f"{YELLOW}  File has {total} lines — offset {offset} is past the end{RESET}"
+
+    # Apply limit
+    end = min(offset - 1 + limit, total)
+    selected = lines[offset - 1:end]
+
+    # Format with line numbers
+    width = len(str(end))
+    formatted = []
+    for i, line in enumerate(selected, start=offset):
+        formatted.append(f"  {DIM}{i:>{width}}│{RESET} {line}")
+
+    output = "\n".join(formatted)
+
+    # Add file info header/footer
+    header = f"{BOLD}  {filepath}{RESET} ({total} lines"
+    if offset > 1 or end < total:
+        header += f", showing {offset}-{end}"
+    header += ")"
+
+    return f"{header}\n{output}"
+
+
 def _run_edit_command(filepath: str) -> str:
     """Open a file in the user's $EDITOR (defaults to vim).
 
@@ -4105,6 +4171,11 @@ def _build_command_registry(
         filepath = line[5:].strip() if len(line) > 5 else ""
         return CommandResult(output=_run_edit_command(filepath) + "\n")
 
+    @registry.register("cat")
+    def _cmd_cat(line: str, ctx: dict) -> CommandResult:
+        cat_args = line[4:].strip() if len(line) > 4 else ""
+        return CommandResult(output=_run_cat_command(cat_args) + "\n")
+
     # ── Session info commands ─────────────────────────────────────
 
     @registry.register("status")
@@ -5092,6 +5163,7 @@ def _print_help() -> None:
     {CYAN}/count{RESET}          Count lines of code by language
     {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
     {CYAN}/edit <file>{RESET}    Open file in $EDITOR (default: vim)
+    {CYAN}/cat <file> [off] [n]{RESET}  View file content with line numbers
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/selfassess{RESET}     Self-diagnostic report (code stats, tests, TODOs, git)
     {CYAN}/test{RESET}           Run project tests (optional: /test <file> or /test -k pattern)
