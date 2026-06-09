@@ -278,8 +278,23 @@ def _slash_completer(text: str, state: int) -> str | None:
         "/rm ": _complete_yoyo_sessions,
     }
 
+    # Commands that complete from a fixed list of options
+    _LIST_COMMANDS: dict[str, Callable[[str], list[str]]] = {
+        "/model ": _complete_model_names,
+        "/provider ": _complete_provider_names,
+        "/think ": lambda partial: [x for x in ("low", "medium", "high") if x.startswith(partial)],
+    }
+
     # Check if we should do path completion instead of command completion
     for prefix, completer_fn in _PATH_COMMANDS.items():
+        if text.startswith(prefix):
+            matches = completer_fn(text[len(prefix):])
+            if state < len(matches):
+                return prefix + matches[state]
+            return None
+
+    # Check list-based completions (model names, provider names)
+    for prefix, completer_fn in _LIST_COMMANDS.items():
         if text.startswith(prefix):
             matches = completer_fn(text[len(prefix):])
             if state < len(matches):
@@ -381,6 +396,18 @@ def _complete_yoyo_sessions(partial: str) -> list[str]:
         return sorted(entries)
     except Exception:
         return []
+
+
+def _complete_model_names(partial: str) -> list[str]:
+    """Complete model names from the known context window table."""
+    from .provider import MODEL_CONTEXT_WINDOWS
+    return sorted(m for m in MODEL_CONTEXT_WINDOWS if m.startswith(partial))
+
+
+def _complete_provider_names(partial: str) -> list[str]:
+    """Complete provider preset names."""
+    from .provider import PROVIDER_PRESETS
+    return sorted(p for p in PROVIDER_PRESETS if p.startswith(partial))
 
 
 def print_banner() -> None:
