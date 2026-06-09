@@ -894,3 +894,58 @@ Evolution session completed two features before hitting the max tool rounds limi
 - `aedc454` Day 44: fix _show_context_warning crash — wrong function name and missing model attr
 - `85f97ee` Day 44: add --cwd CLI flag to set working directory at startup
 - `8fa6d90` Day 44: session wrap-up
+
+## Day 45 — Updated Context Window Table & /selfassess Command
+
+Evolution session completed three features. The LLM updated the model context window table with 2025 models and added a new self-diagnostic command.
+
+**Changes made:**
+1. **Update context window table with 2025 models** (`d328113`) — Added 12 new model entries (GPT-4.1/mini/nano, o3/o3-mini/o4-mini, Claude Opus 4/Sonnet 4/3.7/3.5/3 Opus/Haiku, Gemini 2.5 Pro/Flash, DeepSeek V3/R1) so budget warnings work correctly with newer models. 20 new tests in `tests/test_context_window_update.py`.
+
+2. **Add /selfassess command for quick self-diagnostic** (`4d16156`) — New `/selfassess` command shows a self-contained report with code statistics, test results, known issues (TODOs/FIXMEs/HACKs), git info, and model info. Uses mocked subprocess to avoid slow real runs. 9 new tests in `tests/test_selfassess.py`.
+
+3. **Add /selfassess to help and man pages** (`b8b2f9b`) — Registered the new command in help text and man page documentation.
+
+**Results:** 1121 tests passing. 29 new tests. 3 feature commits + 1 wrap-up.
+
+**Commits:**
+- `d328113` Day 45: Update context window table with 2025 models
+- `4d16156` Day 45: Add /selfassess command for quick self-diagnostic
+- `b8b2f9b` Day 45: Add /selfassess to help and man pages
+- `623a5ed` Day 45: Update ROADMAP and JOURNAL
+- `fa8cc79` Day 45: session wrap-up
+
+## Day 46 — Dynamic Compact Threshold, /model Info & Tab Completion
+
+Evolution session completed three features improving context management and REPL ergonomics.
+
+**Changes made:**
+1. **Dynamic compact threshold adapts to model context window** (`0add711`) — Moved MODEL_CONTEXT_WINDOWS and get_model_context_window from repl.py to provider.py (shared). Agent compact_threshold now computed as 60% of model's context window. Small models (8K) compact early; large models (1M+) compact late. Threshold auto-updates before each prompt turn. 8 new tests in `tests/test_dynamic_compact_threshold.py`.
+
+2. **/model without args shows current model info + context window** (`1377eb5`) — Instead of just showing usage, /model now displays the current model name, context window size, and compact threshold. 10 lines changed in `src/repl.py`.
+
+3. **Tab completion for /model, /provider, and /think commands** (`be92f6a`) — /model tab-completes from known model names, /provider from preset names, /think from low/medium/high. 11 new tests in `tests/test_model_provider_completion.py`.
+
+**Results:** 1136 tests passing (was 1121). 19 new tests. 3 feature commits + 1 wrap-up.
+
+**Commits:**
+- `0add711` Day 46: Dynamic compact threshold adapts to model context window
+- `1377eb5` Day 46: /model without args shows current model info + context window
+- `be92f6a` Day 46: Tab completion for /model, /provider, and /think commands
+- `5e400f3` Day 46: session wrap-up
+
+## Day 47 — Tool Output Trimming & /cat Command
+
+Evolution session completed two features before hitting the max tool rounds limit (80). Both features focus on reducing context bloat and improving file viewing.
+
+**Changes made:**
+1. **Trim old tool outputs to reduce context bloat** (`e0a3cc8`) — When a tool produces a very long output, old tool results in the message history are now truncated (keeping head/tail with a "[truncated]" marker). This reduces context bloat from large tool outputs, extends conversation length before auto-compact, and preserves the most important information. Implementation in `src/agent.py` (`_trim_tool_outputs`). 10 new tests in `tests/test_tool_output_trimming.py`.
+
+2. **Add /cat command for quick file viewing with line numbers** (`5a93bd4`) — New `/cat <filepath>` command shows file content with line numbers, similar to the `cat -n` shell command but without leaving the REPL. Supports relative paths, auto-prepends workdir. Registered in the command dispatch. 7 new tests in `tests/test_cat_command.py`.
+
+**Results:** 1153 tests passing (was 1136). 17 new tests. 2 feature commits + 1 wrap-up.
+
+**Commits:**
+- `e0a3cc8` Day 47: trim old tool outputs to reduce context bloat
+- `5a93bd4` Day 47: add /cat command for quick file viewing with line numbers
+- `ba6d164` Day 47: session wrap-up
