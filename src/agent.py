@@ -147,6 +147,12 @@ class Agent:
                 yield (AgentEvent.INTERRUPTED, None)
                 return
 
+            # Trim old tool outputs to reduce context size before sending to API.
+            # This keeps the last 2 tool rounds intact but truncates older outputs.
+            # Run BEFORE compact check — trimmed outputs may reduce context enough
+            # to avoid an unnecessary auto-compact.
+            self.state.messages = self._trim_tool_outputs(self.state.messages)
+
             # Auto-compact: if context is too long, summarize old messages
             # This prevents token limit errors on long conversations
             if self._should_compact(self.state.messages, max_tokens=self.state.compact_threshold):
@@ -529,6 +535,60 @@ class Agent:
             "content": f"[error: {max_rounds_msg}]",
         })
         yield (AgentEvent.ERROR, max_rounds_msg)
+
+    # ── Context management ────────────────────────────────────────────
+
+    @staticmethod
+    def _trim_tool_outputs(
+        messages: list[dict[str, Any]],
+        max_output: int = 3000,
+        keep_recent: int = 2,
+    ) -> list[dict[str, Any]]:
+        """Trim old tool outputs to reduce context bloat.
+
+        Tool outputs (file reads, shell output, etc.) can be very large and
+        bloat the conversation context. After the LLM has processed a tool
+        result, the full output is no longer needed — a truncated version
+        preserves the key information while saving thousands of tokens.
+
+        Args:
+            messages: Message list (not modified in place).
+            max_output: Max chars to keep per old tool output. Default 3000
+                (~1000 tokens) — enough to preserve the gist of any output.
+            keep_recent: Number of most recent tool outputs to leave intact.
+                Default 2 keeps the last tool round intact for continuity.
+
+        Returns:
+            New message list with old tool outputs truncated.
+        """
+        if not messages:
+            return messages
+
+        # Find all tool message indices
+        tool_indices = [i for i, m in enumerate(messages) if m.get("role") == "tool"]
+        if not tool_indices:
+            return messages
+
+        # Indices of tool outputs to keep intact
+        recent_set = set(tool_indices[-keep_recent:]) if keep_recent > 0 else set()
+
+        # Build new list — only modify old tool outputs that exceed max_output
+        result = []
+        for i, m in enumerate(messages):
+            if i in tool_indices and i not in recent_set:
+                content = m.get("content", "")
+                if len(content) > max_output:
+                    # Truncate and add notice so the LLM knows data was shortened
+                    truncation_notice = f"\n\n... [truncated from {len(content)} chars]"
+                    new_msg = dict(m)
+                    new_msg["content"] = content[:max_output] + truncation_notice
+                    result.append(new_msg)
+                else:
+                    result.append(m)
+            else:
+                result.append(m)
+
+        return result
 
     # ── Context auto-compaction ──────────────────────────────────────
 
