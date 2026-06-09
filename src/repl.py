@@ -144,7 +144,7 @@ _SLASH_COMMANDS = sorted([
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
-    "/skills", "/commands",
+    "/skills", "/commands", "/selfassess",
 ])
 
 
@@ -3821,6 +3821,142 @@ def _format_system_prompt_display(messages: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _run_selfassess(workdir: str | None = None) -> str:
+    """Run a self-diagnostic for the yoyo-py agent.
+
+    Collects code stats, test results, known issues (TODOs/FIXMEs/HACKs),
+    git info, and model info into a single summary. Helps the agent or
+    user quickly understand the current state of the project.
+    """
+    import re
+    cwd = workdir or os.getcwd()
+    lines: list[str] = []
+    lines.append("═══════════════════════════════════════════")
+    lines.append("  yoyo-py Self-Assessment Report")
+    lines.append("═══════════════════════════════════════════")
+
+    def _run(cmd: list[str], timeout: int = 60) -> tuple[bool, str]:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+            return r.returncode == 0, r.stdout.strip() or r.stderr.strip()
+        except FileNotFoundError:
+            return False, f"{cmd[0]} not found"
+        except subprocess.TimeoutExpired:
+            return False, "timed out"
+        except Exception as e:
+            return False, str(e)
+
+    # ── Code Statistics ────────────────────────────────────────────
+    src_dir = os.path.join(cwd, "src")
+    test_dir = os.path.join(cwd, "tests")
+    total_src_lines = 0
+    total_src_files = 0
+    total_test_lines = 0
+    total_test_files = 0
+
+    for root, dirs, files in os.walk(src_dir):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for f in files:
+            if f.endswith(".py"):
+                total_src_files += 1
+                try:
+                    with open(os.path.join(root, f)) as fh:
+                        total_src_lines += sum(1 for _ in fh)
+                except Exception:
+                    pass
+
+    if os.path.isdir(test_dir):
+        for root, dirs, files in os.walk(test_dir):
+            dirs[:] = [d for d in dirs if d != "__pycache__"]
+            for f in files:
+                if f.endswith(".py"):
+                    total_test_files += 1
+                    try:
+                        with open(os.path.join(root, f)) as fh:
+                            total_test_lines += sum(1 for _ in fh)
+                    except Exception:
+                        pass
+
+    lines.append("")
+    lines.append("── Code Stats ──")
+    lines.append(f"  Source:   {total_src_files} files, {total_src_lines:,} lines")
+    lines.append(f"  Tests:    {total_test_files} files, {total_test_lines:,} lines")
+
+    # ── Test Results ───────────────────────────────────────────────
+    lines.append("")
+    lines.append("── Test Results ──")
+    ok, test_output = _run(["python", "-m", "pytest", "--tb=no", "-q"], timeout=120)
+    if ok:
+        # Extract summary line like "1088 passed in 10.62s"
+        summary_lines = test_output.strip().splitlines()
+        summary = summary_lines[-1] if summary_lines else test_output
+        lines.append(f"  ✓ {summary}")
+    else:
+        # Show last few lines on failure
+        fail_lines = test_output.strip().splitlines()[-5:]
+        lines.append(f"  ✗ Tests failed:")
+        for fl in fail_lines:
+            lines.append(f"    {fl}")
+
+    # ── Known Issues (TODOs/FIXMEs/HACKs) ──────────────────────────
+    lines.append("")
+    lines.append("── Known Issues (TODO/FIXME/HACK) ──")
+    issue_count = 0
+    for root, dirs, files in os.walk(src_dir):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for f in files:
+            if not f.endswith(".py"):
+                continue
+            filepath = os.path.join(root, f)
+            try:
+                with open(filepath) as fh:
+                    for i, line_text in enumerate(fh, 1):
+                        if re.search(r'#\s*(TODO|FIXME|HACK)', line_text, re.IGNORECASE):
+                            rel = os.path.relpath(filepath, cwd)
+                            # Truncate long lines
+                            stripped = line_text.strip()
+                            if len(stripped) > 80:
+                                stripped = stripped[:77] + "..."
+                            lines.append(f"  {rel}:{i}: {stripped}")
+                            issue_count += 1
+                            if issue_count >= 20:
+                                lines.append("  ... (showing first 20)")
+                                break
+            except Exception:
+                pass
+            if issue_count >= 20:
+                break
+        if issue_count >= 20:
+            break
+    if issue_count == 0:
+        lines.append("  ✨ No TODOs/FIXMEs/HACKs found — code is clean!")
+
+    # ── Git Info ───────────────────────────────────────────────────
+    lines.append("")
+    lines.append("── Git ──")
+    ok_branch, branch = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    if ok_branch:
+        lines.append(f"  Branch: {branch}")
+        ok_log, log_output = _run(
+            ["git", "log", "--oneline", "-5"]
+        )
+        if ok_log:
+            for log_line in log_output.splitlines():
+                lines.append(f"  {log_line}")
+    else:
+        lines.append("  (git not available)")
+
+    # ── Model & Context ───────────────────────────────────────────
+    lines.append("")
+    lines.append("── Model ──")
+    lines.append(f"  Context window table: {len(_MODEL_CONTEXT_WINDOWS)} models")
+    lines.append(f"  Default context: {_DEFAULT_CONTEXT_WINDOW:,} tokens")
+
+    lines.append("")
+    lines.append("═══════════════════════════════════════════")
+    return "\n".join(lines)
+
+
 def _build_command_registry(
     agent: Agent,
     provider: GLMProvider,
@@ -3976,6 +4112,10 @@ def _build_command_registry(
     @registry.register("health")
     def _cmd_health(line: str, ctx: dict) -> CommandResult:
         return CommandResult(output=_run_health_check() + "\n")
+
+    @registry.register("selfassess")
+    def _cmd_selfassess(line: str, ctx: dict) -> CommandResult:
+        return CommandResult(output=_run_selfassess() + "\n")
 
     @registry.register("test")
     def _cmd_test(line: str, ctx: dict) -> CommandResult:
