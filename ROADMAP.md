@@ -53,7 +53,7 @@
 - [x] Tool output preview in REPL (Day 20)
 
 ## Level 5: Evolution (Day 71+)
-- [ ] Self-assessment skill: analyze own code quality
+- [x] Self-assessment skill: analyze own code quality (Day 45, /selfassess command)
 - [ ] Auto-evolution: read own source → plan → implement → test → commit
 - [ ] GitHub Actions CI for automated evolution
 - [ ] Issue tracking integration (read + respond to GitHub issues)

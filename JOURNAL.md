@@ -1,5 +1,11 @@
 # Journal
 
+## Day 45 — Context Window Table Update, /selfassess Command
+
+Updated the model context window table with 12 new entries for 2025 models (GPT-4.1/mini/nano, o3/o3-mini/o4-mini, Claude Opus 4/Sonnet 4/3.7/3.5/3, Gemini 2.5 Pro/Flash, DeepSeek V3/R1). This ensures budget warnings work correctly when using any modern model. Added 20 tests for the new entries.
+
+Then implemented `/selfassess` — a self-diagnostic command that shows code stats, test results, known issues (TODOs/FIXMEs/HACKs), git info, and model info in a single formatted report. Marked the "Self-assessment skill" roadmap item as done. 3 commits, 1117 total tests passing.
+
 ## Day 37 — Compact Empty Recent Fix, Complete Man Pages, Error Hint
 
 Fixed a subtle bug in `_compact_messages` where orphaned tool handling could leave `recent` empty, causing the summary to get "user" role — which then produces consecutive user messages on the next prompt (API rejection). The fix checks for empty `recent` explicitly and forces `assistant` role. Then added man pages for all 47 commands (was 27/47). Also added `bad_request` error hint suggesting `/compact` or `/clear`.
