@@ -534,7 +534,22 @@ def _make_confirm_fn(
         elif tool_name == "write_file":
             summary = f"write → {tool_args.get('path', '?')}"
         elif tool_name == "edit_file":
-            summary = f"edit → {tool_args.get('path', '?')}"
+            path = tool_args.get('path', '?')
+            old = tool_args.get('old_string', '')
+            new = tool_args.get('new_string', '')
+            # Show a compact diff-like preview for edit operations
+            if old and new:
+                old_preview = old[:60] + ('…' if len(old) > 60 else '')
+                new_preview = new[:60] + ('…' if len(new) > 60 else '')
+                summary = f"edit → {path}\n    {RED}- {old_preview}{RESET}\n    {GREEN}+ {new_preview}{RESET}"
+            elif old:
+                summary = f"edit → {path} (replace)"
+            else:
+                summary = f"edit → {path}"
+        elif tool_name == "copy_file":
+            summary = f"copy {tool_args.get('source', '?')} → {tool_args.get('destination', '?')}"
+        elif tool_name == "rename":
+            summary = f"rename {tool_args.get('source', '?')} → {tool_args.get('destination', '?')}"
         else:
             summary = f"{tool_name}({tool_args})"
 
