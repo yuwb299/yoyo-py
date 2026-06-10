@@ -4,7 +4,7 @@ Each tool is:
 1. A Python function that does the work
 2. An OpenAI-format function schema for the LLM to understand
 
-Tools: bash, read_file, write_file, edit_file, search, list_files, mkdir, glob, rename
+Tools: bash, read_file, write_file, edit_file, search, list_files, mkdir, glob, copy_file, rename
 """
 
 from __future__ import annotations
@@ -210,6 +210,44 @@ def tool_mkdir(path: str, parents: bool = True) -> str:
         return f"[ERROR] Directory already exists: {path}"
     except FileNotFoundError:
         return f"[ERROR] Parent directory does not exist. Use parents=True to create nested dirs."
+    except Exception as e:
+        return f"[ERROR] {e}"
+
+
+def tool_copy_file(source: str, destination: str) -> str:
+    """Copy a file to a new location.
+
+    Args:
+        source: Source file path.
+        destination: Destination file path. Can be a directory (copies into it
+            with the same filename). Refuses to overwrite existing files.
+
+    Returns:
+        Confirmation or error message.
+    """
+    try:
+        import shutil
+        src = Path(source)
+        dst = Path(destination)
+
+        if not src.exists():
+            return f"[ERROR] Source not found: {source}"
+        if not src.is_file():
+            return f"[ERROR] Source is not a file: {source}"
+
+        # If destination is an existing directory, copy into it with same filename
+        if dst.is_dir():
+            dst = dst / src.name
+
+        if dst.exists():
+            return f"[ERROR] Destination already exists: {destination}"
+
+        # Create parent directories if needed
+        dst.parent.mkdir(parents=True, exist_ok=True)
+
+        shutil.copy2(str(src), str(dst))
+        return f"[OK] Copied {source} → {dst}"
+
     except Exception as e:
         return f"[ERROR] {e}"
 
@@ -856,6 +894,27 @@ TOOL_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "copy_file",
+            "description": "Copy a file to a new location. Creates parent directories if needed. Refuses to overwrite existing files.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string",
+                        "description": "Source file path.",
+                    },
+                    "destination": {
+                        "type": "string",
+                        "description": "Destination file path. Can be a directory (copies into it with same filename).",
+                    },
+                },
+                "required": ["source", "destination"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "rename",
             "description": "Rename or move a file or directory. Works across directories. Refuses to overwrite existing files.",
             "parameters": {
@@ -886,6 +945,7 @@ TOOL_FUNCTIONS = {
     "list_files": tool_list_files,
     "mkdir": tool_mkdir,
     "glob": tool_glob,
+    "copy_file": tool_copy_file,
     "rename": tool_rename,
 }
 
