@@ -2362,9 +2362,10 @@ def _run_cat_command(args: str) -> str:
     if not p.is_file():
         return f"{RED}  Not a file: {filepath}{RESET}"
 
-    # Check for binary file
+    # Check for binary file — with-statement avoids leaking file descriptors
     try:
-        chunk = p.open("rb").read(8192)
+        with p.open("rb") as fh:
+            chunk = fh.read(8192)
         if b"\x00" in chunk:
             return f"{RED}  Binary file, cannot display: {filepath}{RESET}"
     except OSError:
@@ -2429,9 +2430,10 @@ def _run_head_command(args: str) -> str:
     if not p.is_file():
         return f"{RED}  Not a file: {filepath}{RESET}"
 
-    # Check for binary file
+    # Check for binary file — with-statement avoids leaking file descriptors
     try:
-        chunk = p.open("rb").read(8192)
+        with p.open("rb") as fh:
+            chunk = fh.read(8192)
         if b"\x00" in chunk:
             return f"{RED}  Binary file, cannot display: {filepath}{RESET}"
     except OSError:
@@ -2500,9 +2502,10 @@ def _run_tail_command(args: str) -> str:
     if not p.is_file():
         return f"{RED}  Not a file: {filepath}{RESET}"
 
-    # Check for binary file
+    # Check for binary file — with-statement avoids leaking file descriptors
     try:
-        chunk = p.open("rb").read(8192)
+        with p.open("rb") as fh:
+            chunk = fh.read(8192)
         if b"\x00" in chunk:
             return f"{RED}  Binary file, cannot display: {filepath}{RESET}"
     except OSError:
