@@ -96,6 +96,18 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
         if _is_binary(p):
             return f"[ERROR] Binary file, cannot read: {path}"
 
+        # For large files, use incremental reading to avoid loading the
+        # entire file into memory. Only read the lines we need.
+        file_size = p.stat().st_size
+        # Heuristic: if the file is >500KB and we're reading a small range,
+        # use incremental reading. Otherwise, read the whole thing (simpler
+        # and needed to get accurate total line count for the header).
+        # We also need the total line count for the header, so for the tail
+        # case we still have to count all lines — but we can do that without
+        # storing all lines in memory.
+        if file_size > 512000 and limit < 200:
+            return _read_file_incremental(p, offset, limit, path)
+
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         total = len(lines)
 
@@ -114,6 +126,43 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
 
     except Exception as e:
         return f"[ERROR] {e}"
+
+
+def _read_file_incremental(p: Path, offset: int, limit: int, path_str: str) -> str:
+    """Read a range of lines from a large file without loading it all.
+
+    Used by tool_read_file for large files (>500KB) when reading a small range.
+    Counts total lines by iterating (no storage), then reads the needed range.
+    """
+    # First pass: count total lines (no storage)
+    total = 0
+    with p.open("r", encoding="utf-8", errors="replace") as fh:
+        for _ in fh:
+            total += 1
+
+    # Clamp offset
+    start = max(0, offset - 1)
+    end = min(total, start + limit)
+
+    if start >= total:
+        return f"[File: {path_str} ({total} lines)]\n[ERROR] Offset {offset} is past end of file"
+
+    # Second pass: read only the needed lines
+    selected = []
+    with p.open("r", encoding="utf-8", errors="replace") as fh:
+        for i, line_text in enumerate(fh):
+            if i >= end:
+                break
+            if i >= start:
+                selected.append(line_text.rstrip("\n"))
+
+    numbered = [f"{i + 1:>6}|{line}" for i, line in enumerate(selected, start=start + 1)]
+
+    header = f"[File: {path_str} ({total} lines)]\n"
+    if start > 0 or end < total:
+        header += f"[Showing lines {start + 1}-{end} of {total}]\n"
+
+    return header + "\n".join(numbered)
 
 
 def tool_write_file(path: str, content: str) -> str:
