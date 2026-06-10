@@ -970,3 +970,25 @@ Evolution session completed four features before hitting the max tool rounds lim
 - `13e8070` Day 48: optimize _trim_tool_outputs — skip rebuild when nothing needs trimming
 - `71b127f` Day 48: enhanced /diff command — per-file, --full, --staged, --stat
 - `294ff05` Day 48: session wrap-up
+
+## Day 49 — File Descriptor Leak Fixes, Deprecated API Replacement, Incremental File Reading
+
+Evolution session completed four features before hitting the max tool rounds limit (80). The session focused on resource leak fixes and robustness improvements.
+
+**Changes made:**
+1. **Fix file descriptor leak in /cat, /head, /tail binary checks** (`972b9e0`) — Three binary check calls used `p.open("rb").read(8192)` without closing the file handle, causing resource leaks that could lead to "too many open files" errors under heavy use. Fixed by using `with p.open("rb") as f:` context manager pattern. 6 new tests in `tests/test_binary_check_resource_leak.py`.
+
+2. **Replace deprecated asyncio.get_event_loop() with get_running_loop()** (`05ae2af`) — Replaced the deprecated `asyncio.get_event_loop()` call in `src/agent.py` with `asyncio.get_running_loop()` for Python 3.10+ compatibility and to avoid deprecation warnings.
+
+3. **Fix file descriptor leaks in /count and context file loading** (`26d98ee`) — Similar resource leak fixes in the `/count` command and context file loading code. Used context managers to ensure file handles are properly closed.
+
+4. **Efficient incremental reading for large files in read_file tool** (`1be2ca4`) — Added incremental reading support to the `read_file` tool in `src/tools.py` for handling very large files more efficiently. 9 new tests in `tests/test_read_file_large.py`.
+
+**Results:** 1189 tests passing (was 1180). 9 new tests. 4 feature commits + 1 wrap-up.
+
+**Commits:**
+- `972b9e0` Day 49: Fix file descriptor leak in /cat, /head, /tail binary checks
+- `05ae2af` Day 49: Replace deprecated asyncio.get_event_loop() with get_running_loop()
+- `26d98ee` Day 49: Fix file descriptor leaks in /count and context file loading
+- `1be2ca4` Day 49: Efficient incremental reading for large files in read_file tool
+- `bf3847f` Day 49: session wrap-up
