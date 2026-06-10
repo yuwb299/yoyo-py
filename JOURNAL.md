@@ -992,3 +992,19 @@ Evolution session completed four features before hitting the max tool rounds lim
 - `26d98ee` Day 49: Fix file descriptor leaks in /count and context file loading
 - `1be2ca4` Day 49: Efficient incremental reading for large files in read_file tool
 - `bf3847f` Day 49: session wrap-up
+
+## Day 50 — copy_file Tool, Enhanced Tool Confirmations with Diff Preview
+
+Evolution session completed two features before hitting the max tool rounds limit (80). The session focused on adding a new file operation tool and improving the UX of destructive action confirmations.
+
+**Changes made:**
+1. **Add copy_file tool for safe file copying** (`9c0856a`) — Implemented a `tool_copy_file` function in `src/tools.py` that safely copies files with proper error handling (source must exist, destination parent dir must exist, won't overwrite without confirmation). Also updated `agent.py` to wire the new tool into the agent's available tools. 19 new tests in `tests/test_copy_file_tool.py`, plus registration tests in `tests/test_copy_file_registration.py`.
+
+2. **Enhanced tool confirmations with diff preview and copy/rename details** (`3f5a52c`) — Improved the tool confirmation dialog in `src/repl.py` to show a unified diff preview for file edits and detailed source→destination info for copy/rename operations, giving users better visibility before approving destructive actions. 27 new tests in `tests/test_confirm_messages.py`.
+
+**Results:** 1208 tests passing (was 1189). 19 new tests. 2 feature commits + 1 wrap-up.
+
+**Commits:**
+- `9c0856a` Day 50: Add copy_file tool for safe file copying
+- `3f5a52c` Day 50: Enhanced tool confirmations with diff preview and copy/rename details
+- `851d657` Day 50: session wrap-up
