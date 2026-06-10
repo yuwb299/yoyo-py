@@ -1074,6 +1074,81 @@ def _git_diff_summary() -> str:
     return "\n".join(lines)
 
 
+def _run_diff_enhanced(args: str) -> str:
+    """Enhanced /diff command — summary, per-file, full, or staged.
+
+    Usage:
+      /diff              Show change summary (default)
+      /diff <file>       Show diff for a specific file
+      /diff --full       Show full diff output
+      /diff --staged     Show staged changes only
+      /diff --stat       Show diffstat summary
+
+    Multiple flags can be combined: /diff --staged --full
+    """
+    parts = args.strip().split()
+
+    # Check we're in a git repo
+    check = _run_git("rev-parse", "--is-inside-work-tree")
+    if check.returncode != 0:
+        return "[Not a git repo]"
+
+    flags = set(parts)
+    has_full = "--full" in flags
+    has_staged = "--staged" in flags
+    has_stat = "--stat" in flags
+    # Extract file argument (non-flag args)
+    file_args = [p for p in parts if not p.startswith("--")]
+
+    if file_args:
+        # Show diff for specific file(s)
+        git_args = ["diff"]
+        if has_staged:
+            git_args.append("--cached")
+        git_args.extend(file_args)
+        result = _run_git(*git_args)
+        if result.returncode != 0:
+            return f"{RED}[ERROR] git diff failed: {result.stderr.strip()}{RESET}"
+        output = result.stdout.strip()
+        if not output:
+            return f"{DIM}No changes in {', '.join(file_args)}{RESET}"
+        # Truncate very long diffs to avoid flooding the terminal
+        if len(output) > 20000:
+            output = output[:20000] + f"\n{DIM}... [truncated, {len(output)} chars total]{RESET}"
+        return output
+
+    if has_full:
+        # Show full diff
+        git_args = ["diff"]
+        if has_staged:
+            git_args.append("--cached")
+        result = _run_git(*git_args)
+        if result.returncode != 0:
+            return f"{RED}[ERROR] git diff failed{RESET}"
+        output = result.stdout.strip()
+        if not output:
+            return f"{DIM}No changes{RESET}"
+        if len(output) > 50000:
+            output = output[:50000] + f"\n{DIM}... [truncated, {len(output)} chars total]{RESET}"
+        return output
+
+    if has_stat:
+        # Show diffstat
+        git_args = ["diff", "--stat"]
+        if has_staged:
+            git_args.append("--cached")
+        result = _run_git(*git_args)
+        if result.returncode != 0:
+            return f"{RED}[ERROR] git diff --stat failed{RESET}"
+        output = result.stdout.strip()
+        if not output:
+            return f"{DIM}No changes{RESET}"
+        return output
+
+    # Default: show the summary view (existing behavior)
+    return _git_diff_summary()
+
+
 def _git_commit(message: str) -> str:
     """Stage all changes and commit with the given message.
 
@@ -4216,7 +4291,8 @@ def _build_command_registry(
 
     @registry.register("diff")
     def _cmd_diff(line: str, ctx: dict) -> CommandResult:
-        return CommandResult(output=_git_diff_summary() + "\n")
+        diff_args = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_diff_enhanced(diff_args) + "\n")
 
     @registry.register("undo")
     def _cmd_undo(line: str, ctx: dict) -> CommandResult:
@@ -4757,14 +4833,22 @@ To review changes first, use /diff or /review.{RESET}""",
 on code quality, potential bugs, and suggestions.{RESET}""",
 
     "diff": f"""\
-{BOLD}/diff{RESET} — Show git diff summary
+{BOLD}/diff{RESET} — Show git changes
 {DIM}───────────────────────────────────{RESET}
 
 {BOLD}Usage:{RESET}
   /diff                Show summary of uncommitted changes
+  /diff <file>         Show diff for a specific file
+  /diff --full         Show full diff output
+  /diff --staged       Show staged changes only
+  /diff --stat         Show diffstat summary
 
-{DIM}Shows file-level diff stats (files changed, insertions, deletions).
-Use /review for AI-powered review of the changes.{RESET}""",
+{BOLD}Examples:{RESET}
+  /diff src/agent.py         Diff a specific file
+  /diff --staged --full      Full staged diff
+  /diff --stat               Quick stat summary
+
+{DIM}Use /review for AI-powered review of the changes.{RESET}""",
 
     "status": f"""\
 {BOLD}/status{RESET} — Show session info
@@ -5323,7 +5407,7 @@ def _print_help() -> None:
     {CYAN}/model <name>{RESET}   Switch model (clears history, use --keep to preserve)
 
   {BOLD}Git:{RESET}
-    {CYAN}/diff{RESET}           Show git diff summary
+    {CYAN}/diff{RESET}           Show git changes (--full, --staged, <file>)
     {CYAN}/log [N] [--oneline]{RESET}  Show recent git commits (default 10)
     {CYAN}/commit <msg>{RESET}   Stage all and commit
     {CYAN}/undo{RESET}           Undo uncommitted changes (restore files to HEAD)
