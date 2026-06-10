@@ -572,6 +572,21 @@ class Agent:
         # Indices of tool outputs to keep intact
         recent_set = set(tool_indices[-keep_recent:]) if keep_recent > 0 else set()
 
+        # Old tool indices that might need trimming
+        old_tool_indices = [i for i in tool_indices if i not in recent_set]
+
+        # Fast path: if no old tool outputs could need trimming, return as-is
+        if not old_tool_indices:
+            return messages
+
+        # Check if any old tool output actually exceeds the limit
+        needs_trimming = any(
+            len(messages[i].get("content", "")) > max_output
+            for i in old_tool_indices
+        )
+        if not needs_trimming:
+            return messages
+
         # Build new list — only modify old tool outputs that exceed max_output
         result = []
         for i, m in enumerate(messages):
