@@ -949,3 +949,24 @@ Evolution session completed two features before hitting the max tool rounds limi
 - `e0a3cc8` Day 47: trim old tool outputs to reduce context bloat
 - `5a93bd4` Day 47: add /cat command for quick file viewing with line numbers
 - `ba6d164` Day 47: session wrap-up
+
+## Day 48 — /head & /tail Commands, /diff Enhancement, /du Command, Trim Optimization
+
+Evolution session completed four features before hitting the max tool rounds limit (80). The session focused on file inspection commands and context optimization.
+
+**Changes made:**
+1. **/head and /tail commands for efficient file preview** (`223157a`) — New `/head <file> [count]` and `/tail <file> [count]` commands show the first/last N lines of a file without loading the entire file. Default count is 10. Supports line numbers, binary file detection, and tab completion. 11 new tests in `tests/test_head_tail_commands.py`.
+
+2. **Optimize _trim_tool_outputs — skip rebuild when nothing needs trimming** (`13e8070`) — When `_trim_tool_outputs` processes message history, it now checks if any tool outputs actually exceed the trim threshold before rebuilding the messages list. If nothing needs trimming, returns the original list unchanged. This avoids unnecessary list copies on every prompt round. 6 new tests.
+
+3. **Enhanced /diff command — per-file, --full, --staged, --stat** (`71b127f`) — The `/diff` command now accepts arguments: `/diff` (summary), `/diff --full` (full diff), `/diff <file>` (diff for specific file), `/diff --staged` (staged changes), `/diff --stat` (stat only). 10 new tests in `tests/test_diff_enhanced.py`.
+
+4. **/du command for file and directory sizes** (post-evolution fix) — The evolution LLM created `tests/test_du_command.py` but ran out of tool rounds before implementing the backend. Fixed by implementing `_run_du_command` and `_human_size` in `src/repl.py`, registering `/du` in the command dispatch, adding tab completion, and fixing tests to properly mock `subprocess.run`. 6 tests in `tests/test_du_command.py`.
+
+**Results:** 1180 tests passing (was 1153). 27 new tests. 3 feature commits + 1 wrap-up + 1 post-evolution fix.
+
+**Commits:**
+- `223157a` Day 48: add /head and /tail commands for efficient file preview
+- `13e8070` Day 48: optimize _trim_tool_outputs — skip rebuild when nothing needs trimming
+- `71b127f` Day 48: enhanced /diff command — per-file, --full, --staged, --stat
+- `294ff05` Day 48: session wrap-up

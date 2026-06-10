@@ -140,7 +140,7 @@ _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
-    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat", "/head", "/tail",
+    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat", "/head", "/tail", "/du",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
@@ -279,6 +279,7 @@ def _slash_completer(text: str, state: int) -> str | None:
         "/cat ": _complete_files,
         "/head ": _complete_files,
         "/tail ": _complete_files,
+        "/du ": _complete_files,
     }
 
     # Commands that complete from a fixed list of options
@@ -2529,9 +2530,73 @@ def _run_tail_command(args: str) -> str:
 
         header = f"{BOLD}  {filepath}{RESET} ({total} lines, last {len(selected)})"
         return f"{header}\n{output}"
-
     except OSError as e:
         return f"{RED}  Error reading file: {e}{RESET}"
+
+
+def _run_du_command(args: str) -> str:
+    """Show file and directory sizes in human-readable format.
+
+    Usage: /du [path]
+    If no path is given, shows sizes in the current directory.
+    Files are sorted by size (largest first).
+    """
+    import subprocess as _sp
+
+    target = args.strip() or "."
+
+    p = Path(target)
+    if not p.exists():
+        return f"{RED}  Path not found: {target}{RESET}"
+
+    if p.is_file():
+        size = p.stat().st_size
+        return f"  {_human_size(size)}  {p.name}"
+
+    # Directory: list files sorted by size
+    entries = []
+    try:
+        for child in sorted(p.iterdir()):
+            if child.is_file():
+                entries.append((child.stat().st_size, child.name))
+            elif child.is_dir():
+                # Get directory size via du
+                try:
+                    result = _sp.run(
+                        ["du", "-sk", str(child)],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    if result.returncode == 0:
+                        kb = int(result.stdout.split()[0])
+                        entries.append((kb * 1024, child.name + "/"))
+                except Exception:
+                    entries.append((0, child.name + "/"))
+    except PermissionError:
+        return f"{RED}  Permission denied: {target}{RESET}"
+
+    if not entries:
+        return f"{DIM}  {target} (empty directory){RESET}"
+
+    # Sort by size, largest first
+    entries.sort(key=lambda e: e[0], reverse=True)
+
+    lines = []
+    for size, name in entries:
+        lines.append(f"  {_human_size(size):>8s}  {name}")
+
+    total = sum(e[0] for e in entries)
+    header = f"{BOLD}  {target}{RESET} ({len(entries)} items)"
+    footer = f"  {'─' * 20}\n  {_human_size(total):>8s}  total"
+    return f"{header}\n" + "\n".join(lines) + f"\n{footer}"
+
+
+def _human_size(n: int) -> str:
+    """Format a byte count as a human-readable size string."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(n) < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TB"
 
 
 def _run_edit_command(filepath: str) -> str:
@@ -4396,6 +4461,11 @@ def _build_command_registry(
         tail_args = line[5:].strip() if len(line) > 5 else ""
         return CommandResult(output=_run_tail_command(tail_args) + "\n")
 
+    @registry.register("du")
+    def _cmd_du(line: str, ctx: dict) -> CommandResult:
+        du_args = line[3:].strip() if len(line) > 3 else ""
+        return CommandResult(output=_run_du_command(du_args) + "\n")
+
     # ── Session info commands ─────────────────────────────────────
 
     @registry.register("status")
@@ -5361,6 +5431,21 @@ Use /tail to see the end of a file.{RESET}""",
 
 {DIM}Shows the end of a file with original line numbers preserved.
 Use /head to see the beginning.{RESET}""",
+
+    "du": f"""\
+{BOLD}/du{RESET} — Show file and directory sizes
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /du                  Show sizes in current directory
+  /du <path>           Show sizes for given path (file or dir)
+
+{BOLD}Examples:{RESET}
+  /du src/                List files in src/ sorted by size
+  /du README.md           Show size of a single file
+
+{DIM}Files and directories are sorted by size (largest first).
+Sizes are shown in human-readable format (B, KB, MB, GB).{RESET}""",
 }
 
 
