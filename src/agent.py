@@ -393,7 +393,10 @@ class Agent:
 
                 if executable and not self._interrupted:
                     # Run all executable tools concurrently in a thread pool
-                    loop = asyncio.get_event_loop()
+                    # get_running_loop() is correct here — we're inside an async
+                    # function, so a loop is always running. get_event_loop() is
+                    # deprecated since Python 3.10.
+                    loop = asyncio.get_running_loop()
                     async def _run_one(tc, tool_name, tool_args, tool_call_id):
                         try:
                             result = await loop.run_in_executor(
