@@ -490,7 +490,8 @@ def load_system_prompt(skills: SkillSet | None = None) -> str:
     if ctx_result:
         ctx_path, ctx_name = ctx_result
         try:
-            content = open(ctx_path, encoding="utf-8").read()
+            with open(ctx_path, encoding="utf-8") as fh:
+                content = fh.read()
             parts.append(f"\n# Project Context ({ctx_name})\n{content}")
         except Exception:
             pass
@@ -1620,7 +1621,8 @@ def _update_system_prompt_cwd(messages: list[dict]) -> None:
         if ctx_result:
             ctx_path, ctx_name = ctx_result
             try:
-                ctx_content = open(ctx_path, encoding="utf-8").read()
+                with open(ctx_path, encoding="utf-8") as fh:
+                    ctx_content = fh.read()
                 new_lines.append(f"\n# Project Context ({ctx_name})\n{ctx_content}")
             except Exception:
                 pass
@@ -1786,7 +1788,8 @@ def _run_count_command(workdir: str | None = None) -> str:
         for fname in files:
             fpath = os.path.join(root, fname)
             try:
-                line_count = sum(1 for _ in open(fpath, encoding="utf-8", errors="ignore"))
+                with open(fpath, encoding="utf-8", errors="ignore") as fh:
+                    line_count = sum(1 for _ in fh)
             except (OSError, PermissionError):
                 continue
 
