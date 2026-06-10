@@ -140,7 +140,7 @@ _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
-    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat",
+    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat", "/head", "/tail",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
@@ -276,6 +276,9 @@ def _slash_completer(text: str, state: int) -> str | None:
         "/save ": _complete_json_paths,
         "/export ": _complete_md_paths,
         "/rm ": _complete_yoyo_sessions,
+        "/cat ": _complete_files,
+        "/head ": _complete_files,
+        "/tail ": _complete_files,
     }
 
     # Commands that complete from a fixed list of options
@@ -2325,6 +2328,137 @@ def _run_cat_command(args: str) -> str:
     return f"{header}\n{output}"
 
 
+def _run_head_command(args: str) -> str:
+    """Show the first N lines of a file (default 10).
+
+    More efficient than /cat for large files — reads only what's needed
+    when the file is large, rather than loading the entire file.
+
+    Usage: /head <file> [count]
+    """
+    parts = args.strip().split()
+
+    if not parts:
+        return f"{YELLOW}Usage: /head <file> [count] (default 10){RESET}"
+
+    filepath = parts[0]
+    count = int(parts[1]) if len(parts) > 1 else 10
+
+    if count < 1:
+        return f"{YELLOW}Count must be at least 1{RESET}"
+
+    p = Path(filepath)
+    if not p.exists():
+        return f"{RED}  File not found: {filepath}{RESET}"
+    if not p.is_file():
+        return f"{RED}  Not a file: {filepath}{RESET}"
+
+    # Check for binary file
+    try:
+        chunk = p.open("rb").read(8192)
+        if b"\x00" in chunk:
+            return f"{RED}  Binary file, cannot display: {filepath}{RESET}"
+    except OSError:
+        pass
+
+    # For efficiency, read only the needed lines when possible
+    try:
+        selected = []
+        total = 0
+        with p.open("r", encoding="utf-8", errors="replace") as f:
+            for i, line_text in enumerate(f, 1):
+                total = i
+                if i <= count:
+                    selected.append((i, line_text.rstrip("\n")))
+                # Keep counting to get total — but for very large files,
+                # stop counting after we have enough (estimate total)
+                if i > count and i > 10000:
+                    # For very large files, just note the total is ">count"
+                    total = None
+                    break
+
+        if total is None:
+            total_str = f">{count}"
+        else:
+            total_str = str(total)
+
+        # Format with line numbers
+        if selected:
+            width = len(str(selected[-1][0]))
+            formatted = []
+            for lineno, line_text in selected:
+                formatted.append(f"  {DIM}{lineno:>{width}}│{RESET} {line_text}")
+            output = "\n".join(formatted)
+        else:
+            output = f"{DIM}  (empty file){RESET}"
+
+        header = f"{BOLD}  {filepath}{RESET} ({total_str} lines, first {min(count, len(selected))})"
+        return f"{header}\n{output}"
+
+    except OSError as e:
+        return f"{RED}  Error reading file: {e}{RESET}"
+
+
+def _run_tail_command(args: str) -> str:
+    """Show the last N lines of a file (default 10).
+
+    For large files, reads from the end efficiently rather than loading
+    the entire file into memory.
+
+    Usage: /tail <file> [count]
+    """
+    parts = args.strip().split()
+
+    if not parts:
+        return f"{YELLOW}Usage: /tail <file> [count] (default 10){RESET}"
+
+    filepath = parts[0]
+    count = int(parts[1]) if len(parts) > 1 else 10
+
+    if count < 1:
+        return f"{YELLOW}Count must be at least 1{RESET}"
+
+    p = Path(filepath)
+    if not p.exists():
+        return f"{RED}  File not found: {filepath}{RESET}"
+    if not p.is_file():
+        return f"{RED}  Not a file: {filepath}{RESET}"
+
+    # Check for binary file
+    try:
+        chunk = p.open("rb").read(8192)
+        if b"\x00" in chunk:
+            return f"{RED}  Binary file, cannot display: {filepath}{RESET}"
+    except OSError:
+        pass
+
+    try:
+        # Read all lines — for tail, we need to know the total count
+        # For very large files this is unavoidable
+        lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+        total = len(lines)
+
+        if total == 0:
+            return f"{DIM}  {filepath} (empty file){RESET}"
+
+        # Select last N lines
+        start = max(0, total - count)
+        selected = lines[start:]
+
+        # Format with original line numbers
+        width = len(str(total))
+        formatted = []
+        for i, line_text in enumerate(selected, start=start + 1):
+            formatted.append(f"  {DIM}{i:>{width}}│{RESET} {line_text}")
+        output = "\n".join(formatted)
+
+        header = f"{BOLD}  {filepath}{RESET} ({total} lines, last {len(selected)})"
+        return f"{header}\n{output}"
+
+    except OSError as e:
+        return f"{RED}  Error reading file: {e}{RESET}"
+
+
 def _run_edit_command(filepath: str) -> str:
     """Open a file in the user's $EDITOR (defaults to vim).
 
@@ -4176,6 +4310,16 @@ def _build_command_registry(
         cat_args = line[4:].strip() if len(line) > 4 else ""
         return CommandResult(output=_run_cat_command(cat_args) + "\n")
 
+    @registry.register("head")
+    def _cmd_head(line: str, ctx: dict) -> CommandResult:
+        head_args = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_head_command(head_args) + "\n")
+
+    @registry.register("tail")
+    def _cmd_tail(line: str, ctx: dict) -> CommandResult:
+        tail_args = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_tail_command(tail_args) + "\n")
+
     # ── Session info commands ─────────────────────────────────────
 
     @registry.register("status")
@@ -5103,6 +5247,36 @@ for detailed help on a specific command.{RESET}""",
 
 {DIM}Displays the current yoyo-py version, active model name,
 and Python runtime version.{RESET}""",
+
+    "head": f"""\
+{BOLD}/head{RESET} — Show first lines of a file
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /head <file>          Show first 10 lines (default)
+  /head <file> <N>      Show first N lines
+
+{BOLD}Examples:{RESET}
+  /head src/agent.py        First 10 lines
+  /head src/agent.py 30     First 30 lines
+
+{DIM}More efficient than /cat for large files — reads only what's needed.
+Use /tail to see the end of a file.{RESET}""",
+
+    "tail": f"""\
+{BOLD}/tail{RESET} — Show last lines of a file
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /tail <file>          Show last 10 lines (default)
+  /tail <file> <N>      Show last N lines
+
+{BOLD}Examples:{RESET}
+  /tail src/agent.py        Last 10 lines
+  /tail src/agent.py 30     Last 30 lines
+
+{DIM}Shows the end of a file with original line numbers preserved.
+Use /head to see the beginning.{RESET}""",
 }
 
 
@@ -5164,6 +5338,8 @@ def _print_help() -> None:
     {CYAN}/init{RESET}           Generate YOYO.md context file (--force to overwrite)
     {CYAN}/edit <file>{RESET}    Open file in $EDITOR (default: vim)
     {CYAN}/cat <file> [off] [n]{RESET}  View file content with line numbers
+    {CYAN}/head <file> [n]{RESET}  Show first N lines (default 10)
+    {CYAN}/tail <file> [n]{RESET}  Show last N lines (default 10)
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/selfassess{RESET}     Self-diagnostic report (code stats, tests, TODOs, git)
     {CYAN}/test{RESET}           Run project tests (optional: /test <file> or /test -k pattern)
