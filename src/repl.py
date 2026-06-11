@@ -4967,7 +4967,7 @@ def _build_command_registry(
 
         def _fmt_ctx(tokens: int) -> str:
             if tokens >= 1_000_000:
-                return f"{tokens // 1000}K"
+                return f"{tokens / 1_000_000:.1f}M"
             return f"{tokens // 1000}K"
 
         lines_out = [f"{BOLD}Known models:{RESET}\n"]

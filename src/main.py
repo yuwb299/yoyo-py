@@ -136,7 +136,7 @@ def _print_models() -> None:
 
     def _fmt_ctx(tokens: int) -> str:
         if tokens >= 1_000_000:
-            return f"{tokens // 1000}K"
+            return f"{tokens / 1_000_000:.1f}M"
         return f"{tokens // 1000}K"
 
     print("Known models (context window sizes):")
