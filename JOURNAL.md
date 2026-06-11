@@ -1045,3 +1045,27 @@ Evolution session hit the max tool rounds limit (80) and bundled two features in
 
 **Commits:**
 - `5bac018` Day 52: session wrap-up (includes /find and /wc commands)
+
+## Day 53 — Context Window Formatting Fix, Pricing Data, /grep -C Flag
+
+Evolution session hit the max tool rounds limit (80) after completing 4 features. The session focused on fixing a display bug in /models, adding model pricing data, and enhancing /grep.
+
+**Changes made:**
+1. **Fix context window formatting** (`aa331f1`) — Fixed a bug where the `/models` command displayed million-token context windows as "1048K" instead of "1.0M". Added proper M/K formatting so large models (Claude 4, Gemini 2.5, etc.) show human-readable sizes. 3 new tests in `tests/test_context_format.py`.
+
+2. **Extract format_context_size to provider.py** (`c4c55e3`) — Refactored the formatting function from repl.py and main.py into a shared utility in `provider.py`. Updated both callers to import from the shared location. Updated existing tests.
+
+3. **Add pricing data for popular models** (`3ac99f1`) — Added pricing information (input/output cost per 1M tokens) for GPT-4.1, o3, o4-mini, Claude 4, Gemini 2.5, DeepSeek V3/R1 to the `/cost` command. 8 new tests in `tests/test_pricing_coverage.py`.
+
+4. **Add -C/--context flag to /grep** (`f72b42c`) — Added a `-C <n>` / `--context <n>` flag to the `/grep` command that shows n lines of surrounding context around each match, similar to `grep -C`. 9 new tests in `tests/test_grep_context.py`.
+
+**Planned but not completed:** /compact before/after stats (ran out of tool rounds).
+
+**Results:** 1239 tests passing (was 1228). 11 new tests. 4 feature commits + 1 wrap-up.
+
+**Commits:**
+- `aa331f1` Day 53: fix context window formatting — show 1.0M instead of 1048K for million-token models
+- `c4c55e3` Day 53: extract format_context_size to provider.py — shared between main and repl
+- `3ac99f1` Day 53: add pricing data for GPT-4.1, o3, o4-mini, Claude 4, Gemini 2.5, DeepSeek V3/R1
+- `f72b42c` Day 53: add -C/--context flag to /grep — show surrounding lines around matches
+- `a7a1462` Day 53: session wrap-up
