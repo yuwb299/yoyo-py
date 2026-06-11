@@ -1029,3 +1029,19 @@ Evolution session completed three features plus one in the wrap-up commit before
 - `6749fd6` Day 51: add --list-models CLI flag to show known models with context windows
 - `f91b5f2` Day 51: add /models REPL command to list known models with context windows
 - `ea410a9` Day 51: session wrap-up (includes /trim command)
+
+## Day 52 — /find and /wc REPL Commands, Test Fix
+
+Evolution session hit the max tool rounds limit (80) and bundled two features into the wrap-up commit. The session focused on adding file discovery and counting utilities to the REPL.
+
+**Changes made:**
+1. **Add /find REPL command** (in wrap-up `5bac018`) — Added a `/find <pattern>` command that finds files by name using glob syntax (e.g. `/find *.py`, `/find *test*`). Searches recursively from the current working directory and filters out noise directories (.git, __pycache__, node_modules, .venv, etc.). Shows count of matches and relative paths. 9 tests in `tests/test_find_command.py`.
+
+2. **Add /wc REPL command** (in wrap-up `5bac018`) — Added a `/wc <file> [file2 ...]` command that counts lines, words, and characters in one or more files. Displays a formatted table with per-file counts and a total row for multiple files. No dedicated test file (trimmed as part of wrap-up when max tool rounds was hit).
+
+3. **Fix test_find_command.py mock** — The evolution LLM wrote tests that mocked `Path.cwd()` but the implementation uses `os.getcwd()`. Fixed the mock to patch `os.getcwd` instead. This was the cause of 2 failing tests.
+
+**Results:** 1228 tests passing (was 1219). 9 new tests. 1 commit (wrap-up).
+
+**Commits:**
+- `5bac018` Day 52: session wrap-up (includes /find and /wc commands)

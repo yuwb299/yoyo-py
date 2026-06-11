@@ -23,7 +23,7 @@ def find_dir(tmp_path):
 def _run_find(args: str, cwd: str) -> str:
     """Run _run_find_command with mocked cwd."""
     from src.repl import _run_find_command
-    with mock.patch.object(Path, 'cwd', return_value=Path(cwd)):
+    with mock.patch('os.getcwd', return_value=cwd):
         return _run_find_command(args)
 
 
