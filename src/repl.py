@@ -4377,6 +4377,35 @@ def _build_command_registry(
             output=f"{DIM}  (compacted: {old_count}→{new_count} messages, ~{old_tokens}→~{new_tokens} tokens){warn}{RESET}\n"
         )
 
+    @registry.register("trim")
+    def _cmd_trim(line: str, ctx: dict) -> CommandResult:
+        """Trim old tool outputs to reduce context without losing conversation.
+
+        Unlike /compact which summarizes and removes messages, /trim keeps
+        all messages but truncates large tool outputs to their first 3000 chars.
+        This is a safe way to shrink context while preserving conversation flow.
+        """
+        old_tokens = Agent._estimate_tokens(agent.state.messages)
+
+        # Count tool outputs that are large before trimming
+        tool_msgs = [m for m in agent.state.messages if m.get("role") == "tool"]
+        large_before = sum(1 for m in tool_msgs if len(m.get("content", "")) > 3000)
+
+        agent.state.messages = Agent._trim_tool_outputs(agent.state.messages)
+
+        new_tokens = Agent._estimate_tokens(agent.state.messages)
+        tool_msgs_after = [m for m in agent.state.messages if m.get("role") == "tool"]
+        large_after = sum(1 for m in tool_msgs_after if len(m.get("content", "")) > 3000)
+
+        saved = old_tokens - new_tokens
+        if saved <= 0:
+            return CommandResult(
+                output=f"{DIM}  (nothing to trim — all tool outputs already compact){RESET}\n"
+            )
+        return CommandResult(
+            output=f"{GREEN}  ✓ trimmed: {large_before}→{large_after} large tool outputs, ~{old_tokens}→~{new_tokens} tokens (saved ~{saved}){RESET}\n"
+        )
+
     # ── Git commands ──────────────────────────────────────────────
 
     @registry.register("diff")
@@ -5539,6 +5568,7 @@ def _print_help() -> None:
     {CYAN}/copy{RESET}           Copy last response to clipboard
     {CYAN}/resume{RESET}         Resume last auto-saved session
     {CYAN}/compact{RESET}        Compact conversation history
+    {CYAN}/trim{RESET}          Trim large tool outputs (lighter than compact)
     {CYAN}/cd [path]{RESET}      Change working directory (default: home)
     {CYAN}/model <name>{RESET}   Switch model (clears history, use --keep to preserve)
     {CYAN}/models{RESET}         List known models with context window sizes
