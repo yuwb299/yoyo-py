@@ -109,6 +109,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="List available provider presets and exit",
     )
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List known models with context window sizes and exit",
+    )
     return parser.parse_args()
 
 
@@ -125,6 +130,32 @@ def _print_providers() -> None:
     print("Set the API key via environment variable or .env file.")
 
 
+def _print_models() -> None:
+    """Print known models with their context window sizes."""
+    from .provider import MODEL_CONTEXT_WINDOWS
+
+    def _fmt_ctx(tokens: int) -> str:
+        if tokens >= 1_000_000:
+            return f"{tokens // 1000}K"
+        return f"{tokens // 1000}K"
+
+    print("Known models (context window sizes):")
+    print()
+    # Group by provider prefix for readability
+    groups: dict[str, list[tuple[str, int]]] = {}
+    for model, ctx in sorted(MODEL_CONTEXT_WINDOWS.items()):
+        prefix = model.split("-")[0].lower()
+        groups.setdefault(prefix, []).append((model, ctx))
+
+    for prefix in sorted(groups):
+        for model, ctx in groups[prefix]:
+            print(f"  {model:30} {_fmt_ctx(ctx):>8} context")
+        print()
+
+    print("Usage: --model <name>")
+    print(f"Default context window: {_fmt_ctx(128000)} (for unknown models)")
+
+
 def main() -> None:
     args = parse_args()
 
@@ -138,6 +169,10 @@ def main() -> None:
 
     if args.list_providers:
         _print_providers()
+        sys.exit(0)
+
+    if args.list_models:
+        _print_models()
         sys.exit(0)
 
     try:
