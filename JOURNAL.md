@@ -1008,3 +1008,24 @@ Evolution session completed two features before hitting the max tool rounds limi
 - `9c0856a` Day 50: Add copy_file tool for safe file copying
 - `3f5a52c` Day 50: Enhanced tool confirmations with diff preview and copy/rename details
 - `851d657` Day 50: session wrap-up
+
+## Day 51 — Tool Summary Fix, --list-models CLI Flag, /models and /trim REPL Commands
+
+Evolution session completed three features plus one in the wrap-up commit before hitting the max tool rounds limit (80). The session focused on fixing an existing gap and adding model discovery features plus a lightweight context trimming command.
+
+**Changes made:**
+1. **Fix _tool_summary missing copy_file** (`c55a225`) — The `_tool_summary` function in `src/repl.py` was missing an entry for the `copy_file` tool, causing it to show just the bare tool name instead of the source→destination summary that `rename` gets. Added the missing case. 3 new tests in `tests/test_tool_summary_copy_file.py`.
+
+2. **Add --list-models CLI flag** (`6749fd6`) — Added a `--list-models` command-line flag to `src/main.py` that prints known models with their context window sizes and exits, useful for quick reference without launching the REPL. 5 new tests in `tests/test_list_models.py`.
+
+3. **Add /models REPL command** (`f91b5f2`) — Added a `/models` REPL command that lists known models with context window sizes, complementing the existing `/model` command (which switches models). Registered in the command registry. 8 new tests in `tests/test_models_command.py`.
+
+4. **Add /trim REPL command** (in wrap-up `ea410a9`) — Added a `/trim` command that truncates large tool outputs (>3000 chars) to reduce context size while preserving conversation flow. Unlike `/compact` which summarizes and removes messages, `/trim` keeps all messages but shortens verbose tool results. Registered in the command registry and added to help text. No dedicated test file (trimmed as part of wrap-up when max tool rounds was hit).
+
+**Results:** 1219 tests passing (was 1211). 8 new tests. 3 feature commits + 1 wrap-up.
+
+**Commits:**
+- `c55a225` Day 51: fix _tool_summary missing copy_file — showed bare name instead of source→dest
+- `6749fd6` Day 51: add --list-models CLI flag to show known models with context windows
+- `f91b5f2` Day 51: add /models REPL command to list known models with context windows
+- `ea410a9` Day 51: session wrap-up (includes /trim command)
