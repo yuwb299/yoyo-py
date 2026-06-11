@@ -140,7 +140,7 @@ _SLASH_COMMANDS = sorted([
     "/help", "/quit", "/exit", "/clear", "/redo", "/last", "/copy",
     "/resume", "/compact", "/cd", "/model", "/revert",
     "/diff", "/log", "/commit", "/undo", "/review", "/pr",
-    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat", "/head", "/tail", "/du",
+    "/tree", "/count", "/init", "/health", "/test", "/fix", "/edit", "/cat", "/head", "/tail", "/du", "/find", "/wc",
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
@@ -280,6 +280,8 @@ def _slash_completer(text: str, state: int) -> str | None:
         "/head ": _complete_files,
         "/tail ": _complete_files,
         "/du ": _complete_files,
+        "/find ": _complete_files,
+        "/wc ": _complete_files,
     }
 
     # Commands that complete from a fixed list of options
@@ -2624,6 +2626,114 @@ def _human_size(n: int) -> str:
     return f"{n:.1f} TB"
 
 
+def _run_find_command(args: str) -> str:
+    """Find files by name pattern (glob syntax).
+
+    Usage: /find <pattern>
+    Supports ** for recursive matching, * for any substring.
+    Searches from the current working directory.
+
+    Args:
+        args: Glob pattern to search for (e.g. "*.py", "*test*", "src/**/test_*.py").
+
+    Returns:
+        List of matching files with relative paths.
+    """
+    pattern = args.strip()
+
+    if not pattern:
+        return f"{YELLOW}Usage: /find <pattern>{RESET}\n{DIM}  Example: /find *.py, /find *test*, /find src/**/*.py{RESET}"
+
+    cwd = Path(os.getcwd())
+    matches = sorted(cwd.glob(f"**/{pattern}" if "/" not in pattern and "**" not in pattern else pattern))
+
+    # Filter out directories — only show files
+    matches = [m for m in matches if m.is_file()]
+
+    # Filter out hidden files and common noise directories
+    noise_dirs = {".git", "__pycache__", "node_modules", ".venv", ".mypy_cache", ".pytest_cache", ".tox"}
+    filtered = []
+    for m in matches:
+        try:
+            rel = m.relative_to(cwd)
+        except ValueError:
+            rel = m
+        parts = rel.parts
+        # Skip if any parent directory is a noise dir or starts with .
+        if any(p in noise_dirs or p.startswith(".") for p in parts):
+            continue
+        filtered.append(rel)
+
+    if not filtered:
+        return f"{DIM}  No files found matching: {pattern}{RESET}"
+
+    lines = [f"{BOLD}  Found {len(filtered)} file(s){RESET} matching {CYAN}{pattern}{RESET}"]
+    for rel in filtered:
+        lines.append(f"  {rel}")
+    return "\n".join(lines)
+
+
+def _run_wc_command(args: str) -> str:
+    """Count lines, words, and characters in files.
+
+    Usage: /wc <file> [file2 ...]
+
+    Args:
+        args: One or more file paths separated by spaces.
+
+    Returns:
+        Line/word/char counts for each file plus a total.
+    """
+    parts = args.strip().split()
+    if not parts:
+        return f"{YELLOW}Usage: /wc <file> [file2 ...]{RESET}"
+
+    results = []
+    total_lines = total_words = total_chars = 0
+    errors = []
+
+    for filepath in parts:
+        p = Path(filepath)
+        if not p.exists():
+            errors.append(f"  {RED}{filepath}: not found{RESET}")
+            continue
+        if not p.is_file():
+            errors.append(f"  {RED}{filepath}: not a file{RESET}")
+            continue
+        try:
+            content = p.read_text(encoding="utf-8", errors="replace")
+            lines = content.count("\n") + (1 if content and not content.endswith("\n") else 0)
+            words = len(content.split())
+            chars = len(content)
+            total_lines += lines
+            total_words += words
+            total_chars += chars
+            results.append((filepath, lines, words, chars))
+        except OSError as e:
+            errors.append(f"  {RED}{filepath}: {e}{RESET}")
+
+    if not results and not errors:
+        return f"{DIM}  No files to count{RESET}"
+
+    # Format as a table
+    header = f"  {BOLD}{'lines':>8} {'words':>8} {'chars':>8}  file{RESET}"
+    sep = f"  {'─' * 8} {'─' * 8} {'─' * 8}"
+    lines = [header, sep]
+
+    for filepath, l, w, c in results:
+        lines.append(f"  {l:>8} {w:>8} {c:>8}  {filepath}")
+
+    if len(results) > 1:
+        lines.append(sep)
+        lines.append(f"  {total_lines:>8} {total_words:>8} {total_chars:>8}  {BOLD}total{RESET}")
+
+    if errors:
+        lines.append("")
+        lines.extend(errors)
+
+    return "\n".join(lines)
+
+
 def _run_edit_command(filepath: str) -> str:
     """Open a file in the user's $EDITOR (defaults to vim).
 
@@ -4520,6 +4630,16 @@ def _build_command_registry(
         du_args = line[3:].strip() if len(line) > 3 else ""
         return CommandResult(output=_run_du_command(du_args) + "\n")
 
+    @registry.register("find")
+    def _cmd_find(line: str, ctx: dict) -> CommandResult:
+        find_args = line[5:].strip() if len(line) > 5 else ""
+        return CommandResult(output=_run_find_command(find_args) + "\n")
+
+    @registry.register("wc")
+    def _cmd_wc(line: str, ctx: dict) -> CommandResult:
+        wc_args = line[3:].strip() if len(line) > 3 else ""
+        return CommandResult(output=_run_wc_command(wc_args) + "\n")
+
     # ── Session info commands ─────────────────────────────────────
 
     @registry.register("status")
@@ -5526,6 +5646,36 @@ Use /head to see the beginning.{RESET}""",
 
 {DIM}Files and directories are sorted by size (largest first).
 Sizes are shown in human-readable format (B, KB, MB, GB).{RESET}""",
+
+    "find": f"""\
+{BOLD}/find{RESET} — Find files by name pattern
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /find <pattern>         Find files matching glob pattern
+
+{BOLD}Examples:{RESET}
+  /find *.py              Find all Python files
+  /find *test*            Find files with "test" in the name
+  /find README.md         Find a specific file
+
+{DIM}Supports standard glob patterns: * (any substring), ** (recursive).
+Searches from the current working directory.
+Filters out .git, __pycache__, node_modules, and other noise.{RESET}""",
+
+    "wc": f"""\
+{BOLD}/wc{RESET} — Count lines, words, and characters in files
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /wc <file> [file2 ...]  Count lines, words, and chars
+
+{BOLD}Examples:{RESET}
+  /wc README.md           Count a single file
+  /wc src/agent.py src/tools.py   Count multiple files
+
+{DIM}Shows a table with line, word, and character counts.
+For multiple files, shows a total row.{RESET}""",
 }
 
 
@@ -5591,6 +5741,9 @@ def _print_help() -> None:
     {CYAN}/cat <file> [off] [n]{RESET}  View file content with line numbers
     {CYAN}/head <file> [n]{RESET}  Show first N lines (default 10)
     {CYAN}/tail <file> [n]{RESET}  Show last N lines (default 10)
+    {CYAN}/du [path]{RESET}       Show file and directory sizes
+    {CYAN}/find <pattern>{RESET}  Find files by name pattern (glob)
+    {CYAN}/wc <file> [files]{RESET}  Count lines, words, chars in files
     {CYAN}/health{RESET}         Run build/test/lint diagnostics
     {CYAN}/selfassess{RESET}     Self-diagnostic report (code stats, tests, TODOs, git)
     {CYAN}/test{RESET}           Run project tests (optional: /test <file> or /test -k pattern)
