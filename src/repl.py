@@ -805,6 +805,10 @@ def _tool_summary(name: str, args: dict) -> str:
     elif name == "mkdir":
         path = args.get("path", ".")
         return f"mkdir {path}"
+    elif name == "copy_file":
+        src = args.get("source", "?")
+        dst = args.get("destination", "?")
+        return f"copy {src} → {dst}"
     elif name == "rename":
         src = args.get("source", "?")
         dst = args.get("destination", "?")
