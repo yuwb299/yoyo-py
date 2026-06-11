@@ -31,19 +31,17 @@ def test_list_models_shows_kilobyte_context():
     assert "128K" in output, f"Expected '128K' for glm-4, got:\n{output}"
 
 
-def test_fmt_ctx_unit():
-    """Directly test the formatting function."""
-    # Import and test the formatting logic
-    def _fmt_ctx(tokens: int) -> str:
-        if tokens >= 1_000_000:
-            return f"{tokens / 1_000_000:.1f}M"
-        return f"{tokens // 1000}K"
+def test_format_context_size_shared():
+    """Test the shared format_context_size function from provider module."""
+    from src.provider import format_context_size
 
     # Sub-million: show K
-    assert _fmt_ctx(8192) == "8K"
-    assert _fmt_ctx(128000) == "128K"
-    assert _fmt_ctx(200000) == "200K"
-    # Million+: show M
-    assert _fmt_ctx(1_000_000) == "1.0M"
-    assert _fmt_ctx(1_047_576) == "1.0M"
-    assert _fmt_ctx(1_048_576) == "1.0M"
+    assert format_context_size(8192) == "8K"
+    assert format_context_size(128000) == "128K"
+    assert format_context_size(200000) == "200K"
+    assert format_context_size(64000) == "64K"
+    # Million+: show M with one decimal
+    assert format_context_size(1_000_000) == "1.0M"
+    assert format_context_size(1_047_576) == "1.0M"
+    assert format_context_size(1_048_576) == "1.0M"
+    assert format_context_size(2_000_000) == "2.0M"

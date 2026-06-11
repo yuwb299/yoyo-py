@@ -132,12 +132,7 @@ def _print_providers() -> None:
 
 def _print_models() -> None:
     """Print known models with their context window sizes."""
-    from .provider import MODEL_CONTEXT_WINDOWS
-
-    def _fmt_ctx(tokens: int) -> str:
-        if tokens >= 1_000_000:
-            return f"{tokens / 1_000_000:.1f}M"
-        return f"{tokens // 1000}K"
+    from .provider import MODEL_CONTEXT_WINDOWS, format_context_size
 
     print("Known models (context window sizes):")
     print()
@@ -149,11 +144,11 @@ def _print_models() -> None:
 
     for prefix in sorted(groups):
         for model, ctx in groups[prefix]:
-            print(f"  {model:30} {_fmt_ctx(ctx):>8} context")
+            print(f"  {model:30} {format_context_size(ctx):>8} context")
         print()
 
     print("Usage: --model <name>")
-    print(f"Default context window: {_fmt_ctx(128000)} (for unknown models)")
+    print(f"Default context window: {format_context_size(128000)} (for unknown models)")
 
 
 def main() -> None:

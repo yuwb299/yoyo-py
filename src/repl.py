@@ -4963,12 +4963,7 @@ def _build_command_registry(
     @registry.register("models")
     def _cmd_models(line: str, ctx: dict) -> CommandResult:
         """List all known models with context window sizes."""
-        from .provider import MODEL_CONTEXT_WINDOWS
-
-        def _fmt_ctx(tokens: int) -> str:
-            if tokens >= 1_000_000:
-                return f"{tokens / 1_000_000:.1f}M"
-            return f"{tokens // 1000}K"
+        from .provider import MODEL_CONTEXT_WINDOWS, format_context_size
 
         lines_out = [f"{BOLD}Known models:{RESET}\n"]
         current = provider.model
@@ -4980,7 +4975,7 @@ def _build_command_registry(
         for prefix in sorted(groups):
             for model, ctx in groups[prefix]:
                 marker = f" {GREEN}← current{RESET}" if model == current else ""
-                lines_out.append(f"  {model:30} {_fmt_ctx(ctx):>8} ctx{marker}")
+                lines_out.append(f"  {model:30} {format_context_size(ctx):>8} ctx{marker}")
             lines_out.append("")
 
         lines_out.append(f"{DIM}  Usage: /model <name> [--keep]{RESET}")

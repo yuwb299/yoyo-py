@@ -89,6 +89,17 @@ def get_model_context_window(model: str) -> int:
     return DEFAULT_CONTEXT_WINDOW
 
 
+def format_context_size(tokens: int) -> str:
+    """Format a context window size as a human-readable string.
+
+    Returns '1.0M' for million-token models, '128K' for smaller ones.
+    Shared between main.py (--list-models) and repl.py (/models).
+    """
+    if tokens >= 1_000_000:
+        return f"{tokens / 1_000_000:.1f}M"
+    return f"{tokens // 1000}K"
+
+
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     "glm": {
         "base_url": "https://open.bigmodel.cn/api/paas/v4",
