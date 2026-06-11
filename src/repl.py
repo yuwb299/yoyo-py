@@ -4019,7 +4019,7 @@ def _search_conversation(
 def _run_grep(args: str) -> str:
     """Quick file content search — like grep but as a slash command.
 
-    Usage: /grep <pattern> [--case] [--glob <pattern>]
+    Usage: /grep <pattern> [--case] [--glob <pattern>] [-C N | --context N]
 
     Searches file contents recursively from the current working directory.
     Supports regex patterns (falls back to literal if invalid regex).
@@ -4032,12 +4032,26 @@ def _run_grep(args: str) -> str:
         Formatted search results with file paths and line numbers.
     """
     if not args.strip():
-        return f"{YELLOW}Usage: /grep <pattern> [--case] [--glob <pattern>]{RESET}"
+        return f"{YELLOW}Usage: /grep <pattern> [--case] [--glob <pattern>] [-C N]{RESET}"
 
     # Parse flags
     parts = args.split()
     case_sensitive = "--case" in parts
+    context_lines = 0
     glob_filter = None
+
+    # Parse -C N / --context N
+    for flag in ("-C", "--context"):
+        if flag in parts:
+            idx = parts.index(flag)
+            if idx + 1 < len(parts):
+                try:
+                    context_lines = int(parts[idx + 1])
+                    parts = parts[:idx] + parts[idx + 2:]
+                    break
+                except ValueError:
+                    pass
+
     if "--glob" in parts:
         glob_idx = parts.index("--glob")
         if glob_idx + 1 < len(parts):
@@ -4048,7 +4062,7 @@ def _run_grep(args: str) -> str:
     # Remove flags from parts to get the pattern
     keywords = [p for p in parts if p not in ("--case", "--glob")]
     if not keywords:
-        return f"{YELLOW}Usage: /grep <pattern> [--case] [--glob <pattern>]{RESET}"
+        return f"{YELLOW}Usage: /grep <pattern> [--case] [--glob <pattern>] [-C N]{RESET}"
 
     pattern = " ".join(keywords)
 
@@ -4116,6 +4130,18 @@ def _run_grep(args: str) -> str:
                     if len(display_line) > 120:
                         display_line = display_line[:117] + "..."
                     results.append(f"{DIM}{rel_path}{RESET}:{GREEN}{line_num}{RESET}:{display_line}")
+
+                    # Show context lines around the match
+                    if context_lines > 0:
+                        for offset in range(-context_lines, context_lines + 1):
+                            if offset == 0:
+                                continue  # Already added the match line
+                            ctx_num = line_num + offset
+                            if 1 <= ctx_num <= len(lines):
+                                ctx_line = lines[ctx_num - 1].strip()
+                                if len(ctx_line) > 120:
+                                    ctx_line = ctx_line[:117] + "..."
+                                results.append(f"{DIM}  {rel_path}:{ctx_num}:  {ctx_line}{RESET}")
 
     if not results:
         return f"{DIM}No matches found for '{pattern}'{RESET}"
@@ -5216,11 +5242,13 @@ Use /status to see current context size.{RESET}""",
   /grep <pattern>              Search files (case-insensitive)
   /grep <pattern> --case      Case-sensitive search
   /grep <pattern> --glob *.py Filter by file pattern
+  /grep <pattern> -C 3        Show 3 lines of context around matches
 
 {BOLD}Examples:{RESET}
   /grep TODO
   /grep "class Agent" --glob *.py
-  /grep "def test_" --case{RESET}""",
+  /grep "def test_" --case
+  /grep "import os" -C 2{RESET}""",
 
     "think": f"""\
 {BOLD}/think{RESET} — Control reasoning depth
