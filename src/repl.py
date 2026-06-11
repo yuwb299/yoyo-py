@@ -4811,6 +4811,32 @@ def _build_command_registry(
             agent.clear()
             return CommandResult(output=f"{DIM}  (switched to {new_model}, conversation cleared){RESET}\n")
 
+    @registry.register("models")
+    def _cmd_models(line: str, ctx: dict) -> CommandResult:
+        """List all known models with context window sizes."""
+        from .provider import MODEL_CONTEXT_WINDOWS
+
+        def _fmt_ctx(tokens: int) -> str:
+            if tokens >= 1_000_000:
+                return f"{tokens // 1000}K"
+            return f"{tokens // 1000}K"
+
+        lines_out = [f"{BOLD}Known models:{RESET}\n"]
+        current = provider.model
+        groups: dict[str, list[tuple[str, int]]] = {}
+        for model, ctx in sorted(MODEL_CONTEXT_WINDOWS.items()):
+            prefix = model.split("-")[0].lower()
+            groups.setdefault(prefix, []).append((model, ctx))
+
+        for prefix in sorted(groups):
+            for model, ctx in groups[prefix]:
+                marker = f" {GREEN}← current{RESET}" if model == current else ""
+                lines_out.append(f"  {model:30} {_fmt_ctx(ctx):>8} ctx{marker}")
+            lines_out.append("")
+
+        lines_out.append(f"{DIM}  Usage: /model <name> [--keep]{RESET}")
+        return CommandResult(output="\n".join(lines_out) + "\n")
+
     @registry.register("cd")
     def _cmd_cd(line: str, ctx: dict) -> CommandResult:
         target = line[3:].strip() if len(line) > 3 else ""
@@ -5515,6 +5541,7 @@ def _print_help() -> None:
     {CYAN}/compact{RESET}        Compact conversation history
     {CYAN}/cd [path]{RESET}      Change working directory (default: home)
     {CYAN}/model <name>{RESET}   Switch model (clears history, use --keep to preserve)
+    {CYAN}/models{RESET}         List known models with context window sizes
 
   {BOLD}Git:{RESET}
     {CYAN}/diff{RESET}           Show git changes (--full, --staged, <file>)
