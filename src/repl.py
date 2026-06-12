@@ -5695,6 +5695,24 @@ model, and configuration. Useful for starting a fresh topic.{RESET}""",
 {DIM}Useful when the response scrolled off screen or you want
 to re-read it.{RESET}""",
 
+    "backups": f"""\
+{BOLD}/backups{RESET} — List, view, and restore file backups
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /backups              List all file backups
+  /backups show <N>     Show content of backup #N
+  /backups restore <N>  Restore backup #N to original file path
+
+{BOLD}Examples:{RESET}
+  /backups              See all available backups
+  /backups show 1       View the first backup's content
+  /backups restore 1    Restore the first backup
+
+{DIM}Backups are created automatically when write_file or edit_file
+overwrites an existing file. Stored in .yoyo/backups/ with a max
+of 10 backups per file.{RESET}""",
+
     "copy": f"""\
 {BOLD}/copy{RESET} — Copy last response to clipboard
 {DIM}───────────────────────────────────{RESET}
@@ -6067,6 +6085,7 @@ def _print_help() -> None:
     {CYAN}/remember <text>{RESET} Remember a project fact for future sessions
     {CYAN}/memories{RESET}       List all remembered facts
     {CYAN}/forget <id>{RESET}    Forget a remembered fact by ID
+    {CYAN}/backups{RESET}        List, show, and restore file backups
     {CYAN}/skills{RESET}         List loaded skills
     {CYAN}/commands{RESET}       List custom slash commands from .yoyo/commands/
 
