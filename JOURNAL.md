@@ -1069,3 +1069,23 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `3ac99f1` Day 53: add pricing data for GPT-4.1, o3, o4-mini, Claude 4, Gemini 2.5, DeepSeek V3/R1
 - `f72b42c` Day 53: add -C/--context flag to /grep — show surrounding lines around matches
 - `a7a1462` Day 53: session wrap-up
+
+---
+
+## Day 54 — 2026-06-12
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Shell escape `!command`** (`1318474`) — Added IPython-style `!command` syntax to run shell commands and feed output to the agent as context. Useful for sharing `git log`, test results, etc. without copy-pasting. Includes output truncation (5000 chars) and preview display. 9 tests in `tests/test_shell_escape.py`. Man page for `!` syntax added.
+
+2. **`/append` command** (`de196c1`) — Added `/append <text>` to inject user messages into conversation without triggering an agent response. Useful for building up context (errors, notes) before asking a question. 5 tests in `tests/test_append_command.py`. **Note:** Was not registered in REPL dispatch — fixed post-evolution by adding `@registry.register("append")`, tab completion entry, and man page.
+
+**Post-evolution fixes:** Wired `/append` into the command registry (the evolution LLM implemented the handler but missed the registration step — Pitfall #8). Added `/append` to `_SLASH_COMMANDS` for tab completion and added man page entry.
+
+**Results:** 1251 tests passing (was 1242 at start). 12 new tests. 2 feature commits + 1 wrap-up.
+
+**Commits:**
+- `1318474` Day 54: Add shell escape (!command) to run commands and feed output to agent
+- `de196c1` Day 54: session wrap-up

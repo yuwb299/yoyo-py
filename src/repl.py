@@ -144,6 +144,7 @@ _SLASH_COMMANDS = sorted([
     "/status", "/tokens", "/cost", "/history", "/search", "/grep", "/system", "/env",
     "/config", "/list-providers", "/provider", "/think", "/version", "/man",
     "/save", "/load", "/sessions", "/rm", "/export", "/remember", "/memories", "/forget",
+    "/append",
     "/skills", "/commands", "/selfassess",
 ])
 
@@ -5103,6 +5104,12 @@ def _build_command_registry(
             _update_system_prompt_cwd(agent.state.messages)
         return CommandResult(output=result + "\n")
 
+    @registry.register("append")
+    def _cmd_append(line: str, ctx: dict) -> CommandResult:
+        text = line[8:].strip() if len(line) > 8 else ""
+        result = _handle_append_command(text, agent.state.messages)
+        return CommandResult(output=f"{result}\n")
+
     @registry.register("revert")
     def _cmd_revert(line: str, ctx: dict) -> CommandResult:
         revert_args = line[7:].strip() if len(line) > 7 else ""
@@ -5377,6 +5384,19 @@ Higher effort = deeper reasoning but slower and more tokens.{RESET}""",
 
 {DIM}Useful when the response wasn't good enough and you want to try
 again with the same prompt.{RESET}""",
+
+    "append": f"""\
+{BOLD}/append{RESET} — Inject context into conversation without agent response
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  /append <text>       Add text as a user message (no agent response)
+
+{BOLD}Example:{RESET}
+  /append Here's the error I'm seeing: ValueError: invalid input
+
+{DIM}Useful for building up context (errors, notes, file contents) before
+asking a question. The agent sees the message on the next turn.{RESET}""",
 
     "revert": f"""\
 {BOLD}/revert{RESET} — Remove messages from history
