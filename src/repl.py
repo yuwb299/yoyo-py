@@ -2065,6 +2065,139 @@ def _load_memories_into_prompt(memory_dir: Path | None = None) -> str:
     return "\n".join(lines)
 
 
+def _run_backups_command(args: str) -> str:
+    """Handle /backups command — list, show, or restore file backups.
+
+    Subcommands:
+        /backups            List all backups
+        /backups show N     Show content of backup #N
+        /backups restore N  Restore backup #N to original file path
+    """
+    from .tools import _BACKUP_SUBDIR, _BACKUP_DIR_NAME, _format_size
+
+    backup_dir = Path(_BACKUP_DIR_NAME) / _BACKUP_SUBDIR
+    parts = args.strip().split()
+
+    # ── Subcommand dispatch ────────────────────────────────────────
+    if parts and parts[0] == "show":
+        return _backups_show(backup_dir, parts[1:] if len(parts) > 1 else [])
+
+    if parts and parts[0] == "restore":
+        return _backups_restore(backup_dir, parts[1:] if len(parts) > 1 else [])
+
+    # ── Default: list backups ─────────────────────────────────────
+    if not backup_dir.exists() or not backup_dir.is_dir():
+        return f"{DIM}No backups found.{RESET}"
+
+    backups = sorted(backup_dir.iterdir(), key=lambda f: f.name)
+    if not backups:
+        return f"{DIM}No backups found.{RESET}"
+
+    lines = [f"{BOLD}File Backups{RESET} ({len(backups)} total)"]
+    lines.append(f"{DIM}  Use /backups show <N> to view, /backups restore <N> to restore{RESET}")
+    lines.append("")
+
+    for i, b in enumerate(backups, 1):
+        size = b.stat().st_size
+        # Parse the backup name to extract the original filename and timestamp
+        name = b.stem  # e.g. "test_txt_20260613_143022"
+        # Remove timestamp suffix (YYYYMMDD_HHMMSS[_N])
+        ts_match = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", name)
+        if ts_match:
+            orig_name = ts_match.group(1).replace("_", os.sep)
+            ts = ts_match.group(2)
+            # Format timestamp nicely
+            try:
+                from datetime import datetime
+                dt = datetime.strptime(ts, "%Y%m%d_%H%M%S")
+                ts_display = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                ts_display = ts
+        else:
+            orig_name = name
+            ts_display = "unknown"
+        lines.append(f"  {CYAN}{i:>3}{RESET}  {orig_name}  {DIM}({ts_display}, {_format_size(size)}){RESET}")
+
+    return "\n".join(lines)
+
+
+def _backups_show(backup_dir: Path, args: list[str]) -> str:
+    """Show content of a backup by index number."""
+    if not args:
+        return f"{YELLOW}Usage: /backups show <N>{RESET}"
+
+    try:
+        idx = int(args[0])
+    except ValueError:
+        return f"{RED}Invalid index: {args[0]}{RESET}"
+
+    if not backup_dir.exists():
+        return f"{RED}No backups found{RESET}"
+
+    backups = sorted(backup_dir.iterdir(), key=lambda f: f.name)
+    if idx < 1 or idx > len(backups):
+        return f"{RED}Backup #{idx} not found ({len(backups)} available){RESET}"
+
+    backup = backups[idx - 1]
+    try:
+        content = backup.read_text(encoding="utf-8", errors="replace")
+    except Exception as e:
+        return f"{RED}Error reading backup: {e}{RESET}"
+
+    name = backup.stem
+    ts_match = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", name)
+    orig_name = ts_match.group(1).replace("_", os.sep) if ts_match else name
+
+    lines = [f"{BOLD}Backup #{idx}{RESET} → {orig_name}"]
+    lines.append(f"{DIM}{'─' * 40}{RESET}")
+    # Show content (truncated if very large)
+    if len(content) > 5000:
+        lines.append(content[:5000])
+        lines.append(f"\n{DIM}... (truncated, {len(content)} chars total){RESET}")
+    else:
+        lines.append(content)
+    return "\n".join(lines)
+
+
+def _backups_restore(backup_dir: Path, args: list[str]) -> str:
+    """Restore a backup by index number to its original file path."""
+    if not args:
+        return f"{YELLOW}Usage: /backups restore <N>{RESET}"
+
+    try:
+        idx = int(args[0])
+    except ValueError:
+        return f"{RED}Invalid index: {args[0]}{RESET}"
+
+    if not backup_dir.exists():
+        return f"{RED}No backups found{RESET}"
+
+    backups = sorted(backup_dir.iterdir(), key=lambda f: f.name)
+    if idx < 1 or idx > len(backups):
+        return f"{RED}Backup #{idx} not found ({len(backups)} available){RESET}"
+
+    backup = backups[idx - 1]
+    name = backup.stem
+    ts_match = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", name)
+    if not ts_match:
+        return f"{RED}Cannot determine original file path from backup name{RESET}"
+
+    orig_name = ts_match.group(1).replace("_", os.sep)
+    orig_path = Path(orig_name)
+
+    try:
+        import shutil
+        # Back up the current file before restoring (so we don't lose it either)
+        if orig_path.exists():
+            from .tools import _backup_file
+            _backup_file(orig_path)
+
+        shutil.copy2(str(backup), str(orig_path))
+        return f"{GREEN}  ✓ Restored {orig_name} from backup #{idx}{RESET}"
+    except Exception as e:
+        return f"{RED}Error restoring backup: {e}{RESET}"
+
+
 def _run_health_check(workdir: str | None = None) -> str:
     """Run build/test/lint diagnostics for the project.
 
@@ -5032,6 +5165,11 @@ def _build_command_registry(
         except ValueError:
             return CommandResult(output=f"{RED}  ID must be a number{RESET}\n")
         return CommandResult(output=_forget_memory(mem_id) + "\n")
+
+    @registry.register("backups")
+    def _cmd_backups(line: str, ctx: dict) -> CommandResult:
+        args = line[8:].strip() if len(line) > 8 else ""
+        return CommandResult(output=_run_backups_command(args) + "\n")
 
     @registry.register("skills")
     def _cmd_skills(line: str, ctx: dict) -> CommandResult:
