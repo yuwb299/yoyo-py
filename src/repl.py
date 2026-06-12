@@ -4225,6 +4225,30 @@ def _find_last_user_message(messages: list[dict]) -> str | None:
     return None
 
 
+def _handle_append_command(text: str, messages: list[dict]) -> str:
+    """Inject a user message into the conversation without triggering agent response.
+
+    Useful for adding context (error messages, notes, file contents) to the
+    conversation before asking a question. The agent will see this message
+    in its context on the next turn but won't respond immediately.
+
+    Args:
+        text: The text to append as a user message.
+        messages: The conversation message list (modified in place).
+
+    Returns:
+        Confirmation or usage message.
+    """
+    if not text.strip():
+        return f"{YELLOW}Usage: /append <text>{RESET}\n{DIM}  Adds context to conversation without triggering a response.{RESET}"
+
+    messages.append({
+        "role": "user",
+        "content": text.strip(),
+    })
+    return f"{GREEN}  ✓ Appended to conversation ({len(text)} chars){RESET}"
+
+
 def _handle_revert_command(messages: list[dict], count: int = 1) -> tuple[list[dict], int] | str:
     """Remove the last N conversation exchanges from message history.
 
