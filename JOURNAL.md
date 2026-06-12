@@ -1089,3 +1089,22 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 **Commits:**
 - `1318474` Day 54: Add shell escape (!command) to run commands and feed output to agent
 - `de196c1` Day 54: session wrap-up
+
+---
+
+## Day 55 — 2026-06-12
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Add `mkdir` to `DESTRUCTIVE_TOOLS`** (`723a029`) — Added `mkdir` to the set of tools requiring user confirmation before execution. Previously, `mkdir` was treated as a read-only tool despite creating directories on the filesystem — inconsistent with other state-modifying tools like `write_file`, `edit_file`, `rename`, `copy_file`. 3 tests in `tests/test_mkdir_destructive.py`. Also updated 2 existing assertions in `tests/test_permission_system.py`.
+
+2. **`--continue` flag for `-p` prompt** (`d09ce63`) — Added `--continue` / `-C` flag that, when used with `-p` (prompt mode), runs the initial prompt and then enters the interactive REPL instead of exiting. Previously, `-p` always exited after processing the prompt. Now `yoyo -p "explain this" --continue` runs the prompt and drops into the REPL for follow-up questions. 3 tests in `tests/test_continue_flag.py`. Changes to `src/main.py` (arg parsing) and `src/repl.py` (registry build order + conditional return).
+
+**Results:** 1257 tests passing (was 1254 at start). 6 new tests. 2 feature commits + 1 wrap-up.
+
+**Commits:**
+- `723a029` Day 55: Add mkdir to DESTRUCTIVE_TOOLS for permission consistency
+- `d09ce63` Day 55: Add --continue flag to enter REPL after -p prompt
+- `aa6307f` Day 55: session wrap-up
