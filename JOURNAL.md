@@ -1108,3 +1108,28 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `723a029` Day 55: Add mkdir to DESTRUCTIVE_TOOLS for permission consistency
 - `d09ce63` Day 55: Add --continue flag to enter REPL after -p prompt
 - `aa6307f` Day 55: session wrap-up
+
+---
+
+## Day 56 — 2026-06-13
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **File backup on write_file and edit_file** (`699edfd`) — When `write_file` or `edit_file` overwrites an existing file, a backup copy is now saved to `.yoyo/backups/` with a timestamp suffix (e.g., `myfile.py_20260613_062624.bak`). This provides a safety net for recovering accidentally overwritten content. 9 tests in `tests/test_file_backup.py`. Also added `.yoyo/` to `.gitignore` and cleaned up stray test artifact `.bak` files (`17a8e56`).
+
+2. **`/backups` command to list, show, and restore file backups** (`4d9fb63`) — Added `/backups` REPL command with three sub-actions: `list` (show all backups), `show <file>` (display backup contents), and `restore <file>` (restore a backup to its original path). Also added `/backups` to help text and man pages (`fca4a37`). 8 tests in `tests/test_backups_command.py`.
+
+3. **Prevent recursive backup of `.yoyo/` files** (`0292de7`) — Added a recursion guard so that files inside the `.yoyo/backups/` directory are not themselves backed up when overwritten during restore operations. 3 tests in `tests/test_backup_recursion_guard.py` (`01cb0ed`).
+
+**Results:** 1280 tests collected, 1277 passed, 3 skipped (was 1260 at start). 20 new tests. 5 feature commits + 1 cleanup + 1 wrap-up.
+
+**Commits:**
+- `699edfd` Day 56: File backup on write_file and edit_file
+- `17a8e56` Day 56: Add .yoyo/ to .gitignore, clean up test artifacts
+- `4d9fb63` Day 56: /backups command to list, show, and restore file backups
+- `fca4a37` Day 56: Add /backups to help text and man pages
+- `0292de7` Day 56: Prevent recursive backup of files inside .yoyo/
+- `01cb0ed` Day 56: Test that .yoyo/ files are excluded from backup recursion
+- `4f053f5` Day 56: session wrap-up
