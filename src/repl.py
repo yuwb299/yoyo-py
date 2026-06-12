@@ -661,6 +661,22 @@ async def run_repl(
         if not line:
             continue
 
+        # Shell escape: !command runs it locally and feeds output to agent
+        # This is like IPython's ! syntax — quick way to share command output
+        # with the agent without copy-pasting.
+        if line.startswith("!") and len(line) > 1:
+            shell_cmd = line[1:].strip()
+            if shell_cmd:
+                print(f"{DIM}  $ {shell_cmd}{RESET}")
+                output = tool_bash(shell_cmd)
+                prompt = _format_shell_escape(shell_cmd, output)
+                # Show preview of output to the user
+                preview = _format_tool_output_preview(output, max_len=300, max_lines=5)
+                if preview:
+                    print(f"{DIM}  {preview}{RESET}\n")
+                await _run_agent_turn(agent, prompt)
+            continue
+
         # Handle slash commands via the command registry
         if line.startswith("/"):
             result = registry.dispatch(line, {})
@@ -854,6 +870,34 @@ def _truncate_str(s: str, max_len: int) -> str:
     if len(s) <= max_len:
         return s
     return s[:max_len] + "..."
+
+
+def _format_shell_escape(command: str, output: str, max_output: int = 5000) -> str:
+    """Format shell escape output as a user message for the agent.
+
+    When a user types '!command', we execute it locally and feed the
+    output to the agent as context. This lets users share command output
+    (git log, test results, etc.) with the agent without copy-pasting.
+
+    Args:
+        command: The shell command that was run (without the ! prefix).
+        output: Combined stdout+stderr from the command.
+        max_output: Max chars to include (default 5000 — enough context
+            without blowing up the conversation).
+
+    Returns:
+        Formatted string suitable as a user message.
+    """
+    if not output or not output.strip():
+        return f"Output of `{command}`:\n(no output)"
+
+    # Truncate very long output — the agent doesn't need 50K of log
+    if len(output) > max_output:
+        truncated = output[:max_output]
+        truncated += f"\n... [truncated from {len(output)} chars]"
+        output = truncated
+
+    return f"Output of `{command}`:\n{output}"
 
 
 def _format_tool_output_preview(
@@ -5057,6 +5101,23 @@ def _build_command_registry(
 
 
 _MAN_PAGES: dict[str, str] = {
+    "shell": f"""\
+{BOLD}!command{RESET} — Shell escape (run command, feed output to agent)
+{DIM}───────────────────────────────────{RESET}
+
+{BOLD}Usage:{RESET}
+  !<command>           Run command and send output to agent as context
+
+{BOLD}Examples:{RESET}
+  !git log --oneline -5    Share recent commits with the agent
+  !pytest tests/ -x        Share test results with the agent
+  !cat README.md           Share file contents with the agent
+  !docker ps               Share running containers with the agent
+
+{DIM}Like IPython's ! syntax. The command runs in your shell, and the
+output is sent to the agent as context. Useful for sharing command
+output without copy-pasting. Output is truncated to 5000 chars.{RESET}""",
+
     "test": f"""\
 {BOLD}/test{RESET} — Run project tests
 {DIM}───────────────────────────────────{RESET}
@@ -5754,6 +5815,7 @@ def _print_help() -> None:
     {CYAN}/quit, /exit{RESET}    Exit the agent
     {CYAN}/help{RESET}           Show this help
     {CYAN}/man <cmd>{RESET}       Show detailed help for a command
+    {CYAN}!<command>{RESET}       Run shell command and feed output to agent
     {CYAN}/clear{RESET}          Clear conversation history
     {CYAN}/redo{RESET}           Re-send the last user prompt
     {CYAN}/revert [N]{RESET}      Remove last N exchanges from history (default 1)
