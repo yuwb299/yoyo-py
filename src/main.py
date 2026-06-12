@@ -114,6 +114,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="List known models with context window sizes and exit",
     )
+    parser.add_argument(
+        "--continue",
+        dest="continue_repl",
+        action="store_true",
+        help="After -p prompt, continue in interactive mode instead of exiting",
+    )
     return parser.parse_args()
 
 
@@ -207,6 +213,7 @@ def main() -> None:
             pipe_input=pipe_input,
             auto_approve=args.yes,
             resume=args.resume,
+            continue_after_prompt=args.continue_repl,
         )
     )
 

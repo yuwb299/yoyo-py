@@ -575,6 +575,7 @@ async def run_repl(
     pipe_input: str | None = None,
     auto_approve: bool = False,
     resume: bool = False,
+    continue_after_prompt: bool = False,
 ) -> None:
     """Run the interactive REPL loop."""
     # Load skills
@@ -634,18 +635,23 @@ async def run_repl(
         print(f"{DIM}  skills: {skills.count()} loaded{RESET}")
     print(f"{DIM}  cwd:   {os.getcwd()}{RESET}\n")
 
-    # Handle piped input
+    # Handle piped input — always exits after processing
     if pipe_input:
         await _run_agent_turn(agent, pipe_input)
         return
 
+    # Build command registry — all slash commands in one place
+    # (needed before initial prompt so the registry is available for the
+    # interactive loop even if we start with -p --continue)
+    registry = _build_command_registry(agent, provider, skills)
+
     # Handle initial prompt (-p flag)
+    # With --continue, run the prompt and fall through to interactive loop.
+    # Without --continue, exit after the prompt (original behavior).
     if initial_prompt:
         await _run_agent_turn(agent, initial_prompt)
-        return
-
-    # Build command registry — all slash commands in one place
-    registry = _build_command_registry(agent, provider, skills)
+        if not continue_after_prompt:
+            return
 
     # Interactive loop
     while True:
