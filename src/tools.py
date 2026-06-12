@@ -177,6 +177,8 @@ def tool_write_file(path: str, content: str) -> str:
     """
     try:
         p = Path(path)
+        # Back up existing file before overwriting — safety net for LLM mistakes
+        _backup_file(p)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
         line_count = content.count("\n") + (0 if content.endswith("\n") else 1)
@@ -285,6 +287,9 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
             return f"[ERROR] old_string not found in {path}"
         if count > 1 and not replace_all:
             return f"[ERROR] old_string found {count} times in {path}. Use replace_all=True or make old_string more specific."
+
+        # Back up before modifying — safety net for LLM mistakes
+        _backup_file(p)
 
         new_content = content.replace(old_string, new_string) if replace_all else content.replace(old_string, new_string, 1)
         p.write_text(new_content, encoding="utf-8")
@@ -553,6 +558,66 @@ def tool_rename(source: str, destination: str) -> str:
 
     except Exception as e:
         return f"[ERROR] {e}"
+
+
+# ─── File backup helpers ─────────────────────────────────────────────
+# When write_file or edit_file overwrites an existing file, we save the
+# old content to .yoyo/backups/ so users can recover from LLM mistakes.
+# Backups are named with a timestamp and sequence number to preserve
+# ordering. We cap at 10 backups per file to avoid unbounded disk growth.
+
+_BACKUP_DIR_NAME = ".yoyo"
+_BACKUP_SUBDIR = "backups"
+_MAX_BACKUPS_PER_FILE = 10
+
+
+def _backup_file(path: Path) -> None:
+    """Back up a file to .yoyo/backups/ before overwriting.
+
+    Only backs up if the file exists. Creates the backup directory if needed.
+    Cleans up old backups beyond _MAX_BACKUPS_PER_FILE for the same file.
+    """
+    if not path.exists() or not path.is_file():
+        return
+
+    try:
+        from datetime import datetime
+
+        backup_dir = Path(_BACKUP_DIR_NAME) / _BACKUP_SUBDIR
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create a safe filename: sanitize the original path
+        # e.g. "src/agent.py" -> "src_agent.py_20260613_143022_001.bak"
+        safe_name = str(path).replace(os.sep, "_").replace("/", "_")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"{safe_name}_{timestamp}.bak"
+
+        # Avoid collision with existing backups (rare but possible)
+        counter = 1
+        backup_path = backup_dir / backup_name
+        while backup_path.exists():
+            backup_name = f"{safe_name}_{timestamp}_{counter}.bak"
+            backup_path = backup_dir / backup_name
+            counter += 1
+
+        import shutil
+        shutil.copy2(str(path), str(backup_path))
+
+        # Clean up old backups for this file (keep most recent N)
+        prefix = safe_name + "_"
+        existing = sorted(
+            [f for f in backup_dir.iterdir() if f.name.startswith(prefix)],
+            key=lambda f: f.name,
+        )
+        while len(existing) > _MAX_BACKUPS_PER_FILE:
+            oldest = existing.pop(0)
+            try:
+                oldest.unlink()
+            except OSError:
+                pass
+    except Exception:
+        # Backup failure should never block the actual write operation
+        pass
 
 
 # ─── Gitignore-aware helpers ─────────────────────────────────────────
