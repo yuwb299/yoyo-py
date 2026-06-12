@@ -25,3 +25,6 @@ venv/
 # Evolution temp files
 ISSUES_TODAY.md
 ISSUE_RESPONSE.md
+-e 
+# yoyo-py data
+.yoyo/
