@@ -580,6 +580,14 @@ def _backup_file(path: Path) -> None:
     if not path.exists() or not path.is_file():
         return
 
+    # Never back up files inside .yoyo/ itself — avoids recursion
+    # when writing to .yoyo/backups/ or other .yoyo/ locations
+    try:
+        path.resolve().relative_to(Path(_BACKUP_DIR_NAME).resolve())
+        return  # File is inside .yoyo/, skip backup
+    except ValueError:
+        pass  # File is outside .yoyo/, proceed with backup
+
     try:
         from datetime import datetime
 
