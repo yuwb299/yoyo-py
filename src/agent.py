@@ -52,7 +52,7 @@ class Agent:
     """
 
     # Tools that modify state and should require user confirmation
-    DESTRUCTIVE_TOOLS = {"bash", "write_file", "edit_file", "rename", "copy_file"}
+    DESTRUCTIVE_TOOLS = {"bash", "write_file", "edit_file", "rename", "copy_file", "mkdir"}
 
     # Tools that only read data — safe to execute concurrently for speed.
     # When ALL tool calls in a batch are read-only, they run in parallel

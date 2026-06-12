@@ -261,5 +261,5 @@ class TestPermissionSystem:
         edit_mock.assert_called_once()
 
     def test_destructive_tools_constant(self):
-        """DESTRUCTIVE_TOOLS contains exactly bash, write_file, edit_file, copy_file, rename."""
-        assert Agent.DESTRUCTIVE_TOOLS == {"bash", "write_file", "edit_file", "copy_file", "rename"}
+        """DESTRUCTIVE_TOOLS contains exactly bash, write_file, edit_file, copy_file, rename, mkdir."""
+        assert Agent.DESTRUCTIVE_TOOLS == {"bash", "write_file", "edit_file", "copy_file", "rename", "mkdir"}
