@@ -3299,7 +3299,12 @@ def _run_review(workdir: str | None = None, commit: bool = False, staged: bool =
 
 # ── /log command ────────────────────────────────────────────────────────
 
-def _format_history(messages: list[dict], show_tokens: bool = False) -> str:
+def _format_history(
+    messages: list[dict],
+    show_tokens: bool = False,
+    last: int | None = None,
+    exchange: bool = False,
+) -> str:
     """Format conversation history as a readable summary.
 
     Shows each message's role, a content preview (truncated), and tool call
@@ -3308,15 +3313,43 @@ def _format_history(messages: list[dict], show_tokens: bool = False) -> str:
     Args:
         messages: The conversation messages list.
         show_tokens: If True, show estimated token count per message.
+        last: If set, only show the last N non-system messages (plus system
+              prompt always). Useful for long conversations.
+        exchange: If True, hide tool role messages — shows only system, user,
+              and assistant messages for a cleaner conversation flow.
 
     Returns a formatted string.
     """
     if not messages:
         return "No messages in conversation."
 
-    lines = [f"{BOLD}Conversation History{RESET} ({len(messages)} messages)"]
+    # Separate system from rest for filtering
+    system_msgs = []
+    rest = list(messages)
+    if rest and rest[0].get("role") == "system":
+        system_msgs = [rest.pop(0)]
 
-    for i, msg in enumerate(messages):
+    # Filter: hide tool messages if exchange=True
+    if exchange:
+        rest = [m for m in rest if m.get("role") != "tool"]
+
+    # Filter: keep only last N non-system messages
+    total_non_system = len(rest)
+    if last is not None and last < total_non_system:
+        if last <= 0:
+            rest = []
+        else:
+            rest = rest[-last:]
+
+    # Reassemble
+    display = system_msgs + rest
+
+    lines = [f"{BOLD}Conversation History{RESET} ({len(display)} messages" +
+             (f", showing last {last}" if last is not None and last < total_non_system else "") +
+             (", exchanges only" if exchange else "") +
+             ")"]
+
+    for i, msg in enumerate(display):
         role = msg.get("role", "unknown")
         content = msg.get("content")
         tool_calls = msg.get("tool_calls")
@@ -4922,7 +4955,19 @@ def _build_command_registry(
     @registry.register("history")
     def _cmd_history(line: str, ctx: dict) -> CommandResult:
         show_tokens = "--tokens" in line
-        return CommandResult(output=_format_history(agent.state.messages, show_tokens=show_tokens) + "\n")
+        exchange = "--exchange" in line
+        # Parse --last N
+        last_n = None
+        import re as _re
+        last_match = _re.search(r"--last\s+(\d+)", line)
+        if last_match:
+            last_n = int(last_match.group(1))
+        return CommandResult(output=_format_history(
+            agent.state.messages,
+            show_tokens=show_tokens,
+            last=last_n,
+            exchange=exchange,
+        ) + "\n")
 
     @registry.register("search")
     def _cmd_search(line: str, ctx: dict) -> CommandResult:
@@ -5772,9 +5817,13 @@ for common models.{RESET}""",
 {BOLD}Usage:{RESET}
   /history             Show conversation history summary
   /history --tokens    Include token estimates per message
+  /history --last N    Show only the last N messages
+  /history --exchange  Hide tool messages (cleaner conversation view)
+  /history --last 10 --exchange
 
-{DIM}Shows a compact summary of all messages in the conversation,
-with roles and truncated content.{RESET}""",
+{DIM}Shows a compact summary of messages in the conversation.
+--last N is useful for long conversations. --exchange filters out
+tool output messages for a cleaner user↔assistant flow.{RESET}""",
 
     "system": f"""\
 {BOLD}/system{RESET} — View current system prompt
