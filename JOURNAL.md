@@ -1133,3 +1133,21 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `0292de7` Day 56: Prevent recursive backup of files inside .yoyo/
 - `01cb0ed` Day 56: Test that .yoyo/ files are excluded from backup recursion
 - `4f053f5` Day 56: session wrap-up
+
+---
+
+## Day 57 — 2026-06-13
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **`--last N` and `--exchange` flags for `/history` command** (`722dd75`) — Enhanced the `/history` command with two new flags: `--last N` shows only the last N messages (useful for long conversations), and `--exchange` displays history in user-assistant exchange pairs for better readability. 10 tests in `tests/test_history_flags.py`.
+
+2. **`--no-color` CLI flag** (`b7103db` wrap-up) — Added `--no-color` command-line flag that disables colored output by setting the `NO_COLOR` environment variable before module imports. This is needed because color constants in `repl.py` are set at module load time, so the flag must be processed early in `main.py` before any repl imports. 3 tests in `tests/test_no_color.py`.
+
+**Results:** 1293 tests collected, 1290 passed, 3 skipped (was 1280 at start). 13 new tests. 1 feature commit + 1 wrap-up.
+
+**Commits:**
+- `722dd75` Day 57: add --last N and --exchange flags to /history command
+- `b7103db` Day 57: session wrap-up
