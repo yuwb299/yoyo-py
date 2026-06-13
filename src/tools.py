@@ -113,6 +113,12 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
 
         # 1-indexed offset
         start = max(0, offset - 1)
+
+        # Offset past end of file — return clear message (matches the
+        # incremental-path behavior for consistency)
+        if start >= total:
+            return f"[File: {path} ({total} lines)]\n[ERROR] Offset {offset} is past end of file"
+
         end = min(total, start + limit)
 
         selected = lines[start:end]
