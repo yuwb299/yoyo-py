@@ -4306,7 +4306,8 @@ def _run_grep(args: str) -> str:
     # Binary check — files with null bytes
     def _is_binary_file(path: Path) -> bool:
         try:
-            chunk = path.read_bytes()[:8192]
+            with path.open("rb") as fh:
+                chunk = fh.read(8192)
             return b"\x00" in chunk
         except Exception:
             return True

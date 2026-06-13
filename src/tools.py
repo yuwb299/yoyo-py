@@ -1055,9 +1055,15 @@ def _truncate(text: str, max_bytes: int = 50000) -> str:
 
 
 def _is_binary(path: Path) -> bool:
-    """Check if a file appears to be binary."""
+    """Check if a file appears to binary by scanning the first 8KB.
+
+    Reads only the first 8KB via a file handle — NOT the whole file.
+    (Previously used path.read_bytes()[:8192], which loaded the entire
+    file into memory before slicing, causing OOM on multi-GB files.)
+    """
     try:
-        chunk = path.read_bytes()[:8192]
+        with path.open("rb") as fh:
+            chunk = fh.read(8192)
         return b"\x00" in chunk
     except Exception:
         return True
