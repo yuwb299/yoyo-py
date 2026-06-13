@@ -336,6 +336,14 @@ def tool_search(
     # Clamp context to non-negative
     context = max(context, 0)
 
+    # Validate the search path up front. Ripgrep returns exit code 2 with an
+    # opaque "IO error ... os error 2" message for missing paths, which the
+    # LLM can't interpret. A clear not-found message is far more actionable.
+    if path:
+        search_path = Path(path)
+        if not search_path.exists():
+            return f"[ERROR] Search path not found: {path}"
+
     try:
         # Build ripgrep command
         cmd = ["rg", "--line-number", "--max-count", str(max_results)]
