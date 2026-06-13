@@ -165,6 +165,24 @@ def _env_float(name: str) -> float | None:
     return None
 
 
+def _clamp_float(val: float | None, min_val: float, max_val: float) -> float | None:
+    """Clamp a float to [min_val, max_val]. None passes through unchanged.
+
+    Used for temperature/top_p so out-of-range values (from env vars or a
+    typo'd CLI flag) don't cause an opaque API bad_request rejection.
+    """
+    if val is None:
+        return None
+    return max(min_val, min(val, max_val))
+
+
+def _clamp_int(val: int | None, min_val: int = 1) -> int | None:
+    """Clamp an int to >= min_val. None passes through unchanged."""
+    if val is None:
+        return None
+    return max(min_val, val)
+
+
 def resolve_provider_config(provider_name: str) -> dict[str, str]:
     """Resolve a provider preset name to its configuration.
 
@@ -307,10 +325,21 @@ class GLMProvider:
                 f"{env_var} is required. Set it in .env or pass to constructor."
             )
 
-        # Generation parameters: explicit args override env vars
-        self.max_tokens = max_tokens if max_tokens is not None else _env_int("GLM_MAX_TOKENS")
-        self.temperature = temperature if temperature is not None else _env_float("GLM_TEMPERATURE")
-        self.top_p = top_p if top_p is not None else _env_float("GLM_TOP_P")
+        # Generation parameters: explicit args override env vars.
+        # Clamp to valid ranges so the API doesn't reject with an opaque
+        # bad_request error. None means "use API default" and is preserved.
+        self.max_tokens = _clamp_int(
+            max_tokens if max_tokens is not None else _env_int("GLM_MAX_TOKENS"),
+            min_val=1,
+        )
+        self.temperature = _clamp_float(
+            temperature if temperature is not None else _env_float("GLM_TEMPERATURE"),
+            min_val=0.0, max_val=2.0,
+        )
+        self.top_p = _clamp_float(
+            top_p if top_p is not None else _env_float("GLM_TOP_P"),
+            min_val=0.0, max_val=1.0,
+        )
 
         # Reasoning effort: controls extended thinking depth for models that support it
         # Valid values: None (use API default), "low", "medium", "high"
