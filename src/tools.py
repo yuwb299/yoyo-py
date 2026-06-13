@@ -675,7 +675,8 @@ def _git_list_files(directory: Path, max_depth: int | None = None) -> list[str] 
 
         return files if files else []
 
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+    except Exception:
+        # Timeout, git not installed, or not a repo — treat as non-git.
         return None
 
 
@@ -684,9 +685,13 @@ def _find_all_files(directory: Path, max_depth: int | None = None) -> list[str]:
 
     Used when not inside a git repo (no .gitignore filtering).
     """
-    cmd = ["find", str(directory), "-type", "f"]
+    # -maxdepth MUST come before -type/-name predicates. GNU find warns
+    # ("you have specified the -maxdepth option after a non-option argument")
+    # and some BusyBox finds error out entirely when the order is wrong.
+    cmd = ["find", str(directory)]
     if max_depth:
         cmd.extend(["-maxdepth", str(max_depth)])
+    cmd.extend(["-type", "f"])
 
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
 
@@ -737,7 +742,8 @@ def _git_ignored_set(directory: Path) -> set[str] | None:
                 ignored.add(os.path.join(str(directory), name))
         return ignored
 
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+    except Exception:
+        # Timeout, git not installed, or not a repo — treat as non-git.
         return None
 
 
