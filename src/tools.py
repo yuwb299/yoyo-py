@@ -116,7 +116,9 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
         end = min(total, start + limit)
 
         selected = lines[start:end]
-        numbered = [f"{i + 1:>6}|{line}" for i, line in enumerate(selected, start=start + 1)]
+        # enumerate(start=start+1) already gives 1-indexed line numbers,
+        # so we use i directly — adding +1 here caused off-by-one numbering.
+        numbered = [f"{i:>6}|{line}" for i, line in enumerate(selected, start=start + 1)]
 
         header = f"[File: {path} ({total} lines)]\n"
         if start > 0 or end < total:
@@ -156,7 +158,7 @@ def _read_file_incremental(p: Path, offset: int, limit: int, path_str: str) -> s
             if i >= start:
                 selected.append(line_text.rstrip("\n"))
 
-    numbered = [f"{i + 1:>6}|{line}" for i, line in enumerate(selected, start=start + 1)]
+    numbered = [f"{i:>6}|{line}" for i, line in enumerate(selected, start=start + 1)]
 
     header = f"[File: {path_str} ({total} lines)]\n"
     if start > 0 or end < total:
