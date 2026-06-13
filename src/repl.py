@@ -19,14 +19,17 @@ from .skills import SkillSet
 from . import __version__
 
 # ANSI colors
-RESET = "\x1b[0m"
-BOLD = "\x1b[1m"
-DIM = "\x1b[2m"
-GREEN = "\x1b[32m"
-YELLOW = "\x1b[33m"
-CYAN = "\x1b[36m"
-RED = "\x1b[31m"
-MAGENTA = "\x1b[35m"
+# ANSI colors — respect NO_COLOR env var (https://no-color.org/)
+# When NO_COLOR is set (any value), all color codes are empty strings.
+_NO_COLOR = bool(os.environ.get("NO_COLOR", ""))
+RESET = "" if _NO_COLOR else "\x1b[0m"
+BOLD = "" if _NO_COLOR else "\x1b[1m"
+DIM = "" if _NO_COLOR else "\x1b[2m"
+GREEN = "" if _NO_COLOR else "\x1b[32m"
+YELLOW = "" if _NO_COLOR else "\x1b[33m"
+CYAN = "" if _NO_COLOR else "\x1b[36m"
+RED = "" if _NO_COLOR else "\x1b[31m"
+MAGENTA = "" if _NO_COLOR else "\x1b[35m"
 
 
 # ── Command Registry ──────────────────────────────────────────────────

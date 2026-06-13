@@ -20,6 +20,11 @@ from dotenv import load_dotenv
 # Load .env before anything else
 load_dotenv()
 
+# Pre-scan for --no-color flag — must set NO_COLOR env var before importing
+# repl.py (which sets color constants at module load time).
+if "--no-color" in sys.argv:
+    os.environ["NO_COLOR"] = "1"
+
 from .provider import GLMProvider
 from .repl import run_repl
 from . import __version__
@@ -87,6 +92,11 @@ def parse_args() -> argparse.Namespace:
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
+    )
+    parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable colored output (also set NO_COLOR env var)",
     )
     parser.add_argument(
         "--think",
@@ -159,6 +169,10 @@ def _print_models() -> None:
 
 def main() -> None:
     args = parse_args()
+
+    # Disable colors if --no-color flag is set (or NO_COLOR env var)
+    if args.no_color:
+        os.environ["NO_COLOR"] = "1"
 
     # Change working directory early so provider, skills, etc. all resolve correctly
     if args.cwd:
