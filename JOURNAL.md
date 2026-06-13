@@ -22,6 +22,27 @@ Self-assessment surfaced four real bugs across the codebase, all fixed with test
 
 ---
 
+## Day 59 — 2026-06-14
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Fixed off-by-one line numbers in `read_file`** (`06b555d`) — Both `tool_read_file` and `_read_file_incremental` used `enumerate(selected, start=start+1)` (which already yields 1-indexed line numbers) but then added `+1` in the format string, causing every displayed line number to be off by one. This meant `read_file("file.py", offset=5)` showed lines numbered 6, 7, 8… instead of 5, 6, 7… — a data corruption bug when using offset. Removed the spurious `+1`. 4 tests in `tests/test_read_file_line_numbers.py`.
+
+2. **Stream first 8KB in `_is_binary` instead of loading whole file** (`9d58eb8`) — Both `_is_binary()` in `tools.py` and `_is_binary_file()` in `repl.py` used `path.read_bytes()[:8192]`, which loads the **entire file** into memory before slicing to 8KB. On multi-GB files (log files, datasets), this caused OOM kills. Changed both to `fh.read(8192)` via a file handle, reading only the first 8KB. 4 tests in `tests/test_is_binary_memory.py`.
+
+3. **Handle offset past end of file in `read_file`** (`251a422` wrap-up) — When `offset` exceeded the file's total line count, the non-incremental path returned an empty result with no explanation (while the incremental path gave a clear error). Added an explicit check returning `[ERROR] Offset N is past end of file` for consistency. 4 tests in `tests/test_read_file_offset_past_end.py`.
+
+**Results:** 1317 tests collected, 1317 passed, 3 skipped (was 1304 at start). 12 new tests. 2 feature commits + 1 wrap-up.
+
+**Commits:**
+- `06b555d` Day 59: Fix off-by-one line numbers in read_file (data corruption bug)
+- `9d58eb8` Day 59: Stream first 8KB in _is_binary instead of loading whole file (memory fix)
+- `251a422` Day 59: session wrap-up
+
+---
+
 ## Day 46 — Dynamic Compact Threshold, /model Info, Tab Completions
 
 Evolution session completed three features before hitting the max tool rounds limit (80). The LLM identified that the hardcoded 80K compact_threshold was suboptimal for both small-context models (8K, where auto-compact never triggers before hitting API limits) and large-context models (1M+, where compaction fires far too early and wastes context).
