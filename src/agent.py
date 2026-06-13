@@ -227,7 +227,11 @@ class Agent:
                     if self._interrupted:
                         break
 
-                    # Accumulate usage from chunks
+                    # Accumulate usage from chunks. Some APIs send usage only on
+                    # the final chunk (the one with finish_reason); others send
+                    # it incrementally. We add each chunk's usage exactly once
+                    # here — do NOT add again on the finish_reason chunk below,
+                    # or the final chunk's usage gets double-counted.
                     if hasattr(chunk, "usage") and chunk.usage:
                         round_usage.add(GLMProvider.parse_usage(chunk))
 
@@ -268,9 +272,11 @@ class Agent:
 
                     # Check for finish
                     if chunk.choices[0].finish_reason in ("stop", "tool_calls"):
-                        # Final usage from this response
-                        if hasattr(chunk, "usage") and chunk.usage:
-                            round_usage.add(GLMProvider.parse_usage(chunk))
+                        # Stream ended. Usage was already accumulated above as
+                        # each chunk arrived, so nothing to do here. (Previously
+                        # this re-added the final chunk's usage, double-counting
+                        # it for APIs that attach usage to the finish chunk.)
+                        pass
 
             except Exception as e:
                 error_msg = f"Stream error: {e}"
