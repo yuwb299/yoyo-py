@@ -216,7 +216,7 @@ def tool_write_file(path: str, content: str) -> str:
         _backup_file(p)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
-        line_count = content.count("\n") + (0 if content.endswith("\n") else 1)
+        line_count = 0 if content == "" else (content.count("\n") + (0 if content.endswith("\n") else 1))
         return f"[OK] Wrote {line_count} lines to {path}"
     except Exception as e:
         return f"[ERROR] {e}"

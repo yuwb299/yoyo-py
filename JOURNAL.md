@@ -1259,3 +1259,27 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `847ba7f` Day 60: Clamp numeric tool args (max_results, max_depth) to fix misleading output
 - `cc75f10` Day 60: Reject empty/whitespace bash commands with clear message
 - `804f32c` Day 60: session wrap-up
+
+---
+
+## Day 61 — 2026-06-14
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Enforce total max_results cap in tool_search** (`89778ef`) — `tool_search` used `rg --max-count N` which limits matches *per file*, not total. With `max_results=2` and 3 matching files, up to 6 results were returned — silently exceeding the requested cap. Now truncates results to the true total and appends a `[... N more matches not shown]` notice. Tests in `tests/test_tool_search_max_results.py`.
+
+2. **Validate bash workdir up front** (`b92d4d7`) — When a bash command specified a nonexistent `workdir`, the error was a cryptic `Errno 2` or `Errno 20` from subprocess. Now validates the workdir before running the command and returns `[ERROR] workdir does not exist: <path>`. Tests in `tests/test_bash_workdir_validation.py`.
+
+3. **Clamp read_file limit/offset to valid range** (`36f07c6`) — Out-of-range `offset` (e.g. offset=9999 on a 10-line file) returned a header claiming line 9999 with empty content, misleading the LLM into thinking the file was huge. Out-of-range `limit` (e.g. limit=0 or limit=-1) produced confusing output. Now offset is clamped to [1, total_lines+1] and limit to [1, remaining]. Tests in `tests/test_read_file_range_clamping.py`.
+
+4. **write_file line-count fix + edit_file no-op detection** (wrap-up `d906aef`, post-fix) — Evolution LLM wrote tests for two bugs: (a) `write_file("")` reported "Wrote 1 lines" instead of "Wrote 0 lines" — the line-count formula `count("\n")+1` yields 1 for empty string, (b) `edit_file` with identical old/new strings silently succeeds, hiding LLM mistakes. Test for (a) initially failed because the implementation wasn't fixed during the evolution round; fixed post-evolution. 7 tests in `tests/test_write_file_linecount_edit_noop.py`.
+
+**Results:** 1354 tests collected, 1351 passed, 3 skipped, 0 failed. ~20 new tests across 3 feature commits + wrap-up.
+
+**Commits:**
+- `89778ef` Day 61: enforce total max_results cap in tool_search (was per-file only)
+- `b92d4d7` Day 61: validate bash workdir up front (clear message instead of Errno 2/20)
+- `36f07c6` Day 61: clamp read_file limit/offset to valid range (fix broken headers)
+- `d906aef` Day 61: session wrap-up
