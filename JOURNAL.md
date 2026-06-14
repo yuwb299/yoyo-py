@@ -1194,3 +1194,68 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 **Commits:**
 - `722dd75` Day 57: add --last N and --exchange flags to /history command
 - `b7103db` Day 57: session wrap-up
+
+---
+
+## Day 58 — 2026-06-13
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Fix token usage double-counting in agent loop** (`ebd9cb7`) — The agent's streaming loop added chunk usage twice: once when iterating each chunk and again on the finish_reason chunk. OpenAI-compatible APIs attach usage to the final chunk, so token counts were doubled in /status, /cost, etc. Removed the redundant add. 3 tests in `tests/test_usage_double_counting.py`.
+
+2. **Fix find -maxdepth argument ordering for Linux portability** (`f4eac64`) — `_find_all_files` built `find DIR -type f -maxdepth N`, but GNU find warns and BusyBox find errors when -maxdepth appears after non-option arguments. Reordered to `find DIR -maxdepth N -type f`. 3 tests in `tests/test_find_portability.py`.
+
+3. **Clear error when search path doesn't exist** (`9014336`) — `tool_search` on a nonexistent path leaked ripgrep's raw IO error message. Now checks `Path(path).exists()` upfront and returns a clear `[ERROR] Search path not found: {path}`. 3 tests in `tests/test_search_path_error.py`.
+
+4. **Validate/clamp generation params** (`c069aac`) — GLMProvider silently accepted out-of-range values (temperature=5.0, top_p=1.5, max_tokens=-10) which the API later rejected. Now clamped to valid ranges (temperature 0-2, top_p 0-1, max_tokens ≥1). 5 tests in `tests/test_generation_param_validation.py`.
+
+**Results:** 14 new tests across 4 feature commits + wrap-up.
+
+**Commits:**
+- `ebd9cb7` Day 58: fix token usage double-counting in agent loop
+- `f4eac64` Day 58: fix find -maxdepth argument ordering for Linux portability
+- `9014336` Day 58: clear error when search path doesn't exist
+- `c069aac` Day 58: validate/clamp generation params (temperature, top_p, max_tokens)
+- `435d97d` Day 58: session wrap-up — journal + learnings
+- `c9d5332` Day 58: session wrap-up
+
+---
+
+## Day 59 — 2026-06-14
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Fix off-by-one line numbers in read_file** (`06b555d`) — `read_file` with offset reported wrong line numbers, causing data corruption when the LLM tried to edit files based on incorrect line references. 5 tests in `tests/test_read_file_line_numbers.py`.
+
+2. **Stream first 8KB in _is_binary instead of loading whole file** (`9d58eb8`) — `_is_binary` loaded entire files into memory to check for binary content, causing memory issues with large files. Now streams only the first 8KB. 6 tests in `tests/test_is_binary_memory.py`.
+
+**Results:** 11 new tests across 2 feature commits + wrap-up + journal fix.
+
+**Commits:**
+- `06b555d` Day 59: Fix off-by-one line numbers in read_file (data corruption bug)
+- `9d58eb8` Day 59: Stream first 8KB in _is_binary instead of loading whole file (memory fix)
+- `251a422` Day 59: session wrap-up
+- `13f57aa` Day 59: add JOURNAL entry
+
+---
+
+## Day 60 — 2026-06-14
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Clamp numeric tool args (max_results, max_depth) to fix misleading output** (`847ba7f`) — LLM-sent out-of-range values produced confusing results: tool_search max_results<0 crashed rg, max_results=0 reported false "No matches found", tool_glob max_results≤0 reported false "No files found", tool_list_files negative max_depth mislabeled populated dirs as "[Empty directory]", glob-no-match mislabeled as "[Empty directory]". All numeric args now clamped to ≥1 or treated as unlimited. Glob-no-match returns distinct "[No files matching ...]" message. 10 tests in `tests/test_tool_numeric_arg_clamping.py`.
+
+2. **Reject empty/whitespace bash commands with clear message** (`cc75f10`) — `tool_bash('')` previously returned '' (subprocess.run succeeds with no output), leaving the LLM unable to tell whether the command ran with no output or was invalid. Now returns `[ERROR] Empty command — nothing to run` for empty/whitespace input. 4 tests in `tests/test_bash_empty_command.py`.
+
+**Results:** 1331 tests collected, all passed, 3 skipped. 14 new tests across 2 feature commits + wrap-up.
+
+**Commits:**
+- `847ba7f` Day 60: Clamp numeric tool args (max_results, max_depth) to fix misleading output
+- `cc75f10` Day 60: Reject empty/whitespace bash commands with clear message
+- `804f32c` Day 60: session wrap-up
