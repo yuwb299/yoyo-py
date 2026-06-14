@@ -343,6 +343,10 @@ def tool_search(
     """
     # Clamp context to non-negative
     context = max(context, 0)
+    # Clamp max_results to >=1. Negative values crash rg ("value is not a
+    # valid number"); 0 means "unlimited" in rg but the original code reported
+    # "[No matches found]" on the empty output — both are misleading.
+    max_results = max(1, max_results)
 
     # Validate the search path up front. Ripgrep returns exit code 2 with an
     # opaque "IO error ... os error 2" message for missing paths, which the
@@ -421,6 +425,13 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
         Sorted file listing with sizes.
     """
     try:
+        # Clamp max_depth: treat <=0 (or None) as 'no limit'. Negative values
+        # break find ('-maxdepth: value must be positive') and the os.walk
+        # fallback's depth>=max_depth check is always true for negatives,
+        # producing an empty result that gets mislabeled "[Empty directory]".
+        if max_depth is not None and max_depth <= 0:
+            max_depth = None
+
         p = Path(path)
         if not p.exists():
             return f"[ERROR] Path not found: {path}"
@@ -437,6 +448,10 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
             # Not a git repo — fall back to listing everything
             files = _find_all_files(p, max_depth=max_depth)
 
+        # Track whether anything was found before the glob filter, so we can
+        # distinguish a truly empty directory from a glob that matched nothing.
+        had_files_before_filter = bool(files)
+
         # Apply glob filter
         if glob_pattern:
             import fnmatch
@@ -449,6 +464,11 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
             files = files[:200]
 
         if not files:
+            # Distinguish "directory truly empty" from "glob filter excluded
+            # everything". The LLM seeing "[Empty directory]" for a populated
+            # dir (where only the glob didn't match) draws wrong conclusions.
+            if glob_pattern and had_files_before_filter:
+                return f"[No files matching '{glob_pattern}' in {path}]"
             return "[Empty directory]"
 
         lines = [f"[{total} files in {path}]"]
@@ -489,6 +509,10 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
         List of matching file paths, sorted alphabetically.
     """
     try:
+        # Clamp max_results to >=1. A value of 0 or negative produces an empty
+        # result and the caller reports "[No files found matching pattern]"
+        # even when matching files exist — misleading.
+        max_results = max(1, max_results)
         p = Path(path)
         if not p.exists():
             return f"[ERROR] Path not found: {path}"
