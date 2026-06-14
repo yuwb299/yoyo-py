@@ -103,6 +103,17 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
         File content with line numbers, or error message.
     """
     limit = min(limit, 2000)
+    # Clamp limit to >=1. A non-positive limit produced nonsensical output:
+    # limit=0 → "[Showing lines 1-0 of N]" (empty range), and limit=-3 →
+    # "[Showing lines 1--3 of N]" (double-minus, broken formatting).
+    # Treat any non-positive value as "use the default 500".
+    if limit < 1:
+        limit = 500
+    # Clamp offset to >=1. offset=0 or negative would compute start = max(0, offset-1)
+    # which silently reads from the start — that's actually fine behavior, but
+    # we make it explicit so the header line numbers stay sensible.
+    if offset < 1:
+        offset = 1
     try:
         p = Path(path)
         if not p.exists():
