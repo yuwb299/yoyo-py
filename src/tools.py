@@ -31,6 +31,11 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
     """
     # Clamp timeout to reasonable range — LLM could send absurd values
     timeout = max(1, min(timeout, 600))
+    # Reject empty/whitespace commands up front. Without this, subprocess.run("")
+    # succeeds with empty output, and the LLM can't tell whether the command
+    # ran with no output or was never valid — leading to confused retries.
+    if not command or not str(command).strip():
+        return "[ERROR] Empty command — nothing to run"
     try:
         result = subprocess.run(
             command,
