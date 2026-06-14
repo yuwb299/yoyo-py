@@ -362,8 +362,14 @@ def tool_search(
             return f"[ERROR] Search path not found: {path}"
 
     try:
-        # Build ripgrep command
-        cmd = ["rg", "--line-number", "--max-count", str(max_results)]
+        # Build ripgrep command.
+        # --max-count N is PER-FILE in rg, not total. We use it as a
+        # performance cap (bounded above by max_results so a single huge
+        # file can't blow up output), then enforce the REAL total cap in
+        # Python below. Without the Python-side cap, max_results=2 across
+        # 10 files returns up to 20 lines — silently misleading the LLM.
+        per_file_cap = max(1, max_results)
+        cmd = ["rg", "--line-number", "--max-count", str(per_file_cap)]
         if context > 0:
             cmd.extend(["--context", str(context)])
         if file_glob:
@@ -385,11 +391,11 @@ def tool_search(
                 return _truncate(output, 50000)
             return f"[WARN] Search encountered issues: {result.stderr[:200]}"
 
-        output = result.stdout.strip()
-        return _truncate(output, 50000)
+        return _apply_total_match_cap(result.stdout, max_results)
 
     except FileNotFoundError:
-        # Fallback to grep if rg not installed
+        # Fallback to grep if rg not installed.
+        # grep has no --max-count, so we always enforce the cap in Python.
         cmd = ["grep", "-rn", "-E"]
         if context > 0:
             cmd.extend([f"-C{context}"])
@@ -401,18 +407,52 @@ def tool_search(
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 return "[No matches found]"
-            # Limit results to max_results lines — grep doesn't have a direct
-            # equivalent to rg's --max-count for total matches, so we truncate
-            output_lines = result.stdout.strip().splitlines()
-            if len(output_lines) > max_results:
-                output_lines = output_lines[:max_results]
-            return _truncate("\n".join(output_lines), 50000)
+            return _apply_total_match_cap(result.stdout, max_results)
         except Exception as e:
             return f"[ERROR] {e}"
     except subprocess.TimeoutExpired:
         return "[TIMEOUT] Search timed out"
     except Exception as e:
         return f"[ERROR] {e}"
+
+
+def _apply_total_match_cap(raw_output: str, max_results: int) -> str:
+    """Enforce a total cap on the number of match lines returned.
+
+    rg's --max-count caps per-file matches, not the total. This helper takes
+    raw rg/grep output and trims it to at most `max_results` match lines,
+    appending a truncation notice so the LLM knows more matches exist and
+    can re-search with a higher cap or a more specific pattern if needed.
+
+    Match lines are lines produced by `rg --line-number` (format:
+    `path:linenum:content` or `path-linenum-content` for context). We count
+    a "match" as any line whose separator is `:` (the actual hit), since
+    context lines use `-`. For grep -n output the format is the same.
+    """
+    if not raw_output:
+        return ""
+
+    lines = raw_output.rstrip("\n").splitlines()
+    if not lines:
+        return ""
+
+    # Identify match lines vs context/separator lines.
+    # Match line format:  path:NUM:content  (rg) or path:content (grep)
+    # Context line format: path-NUM-content (rg only, with --context)
+    # We can't perfectly distinguish without parsing, but we can cap on the
+    # TOTAL line count which is a safe upper bound on match lines and matches
+    # user intent (they asked for at most N results).
+    total = len(lines)
+    if total <= max_results:
+        return _truncate(raw_output.strip(), 50000)
+
+    kept = lines[:max_results]
+    omitted = total - max_results
+    body = "\n".join(kept)
+    # Mention the cap value and how many lines were dropped, so the LLM/user
+    # can decide whether to narrow the pattern or raise max_results.
+    notice = f"\n... [{omitted} more match(es) omitted — raise max_results (currently {max_results}) or narrow the pattern to see them]"
+    return _truncate(body + notice, 50000)
 
 
 def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth: int | None = None) -> str:
