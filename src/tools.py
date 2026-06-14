@@ -375,6 +375,13 @@ def tool_search(
     # "[No matches found]" on the empty output — both are misleading.
     max_results = max(1, max_results)
 
+    # Reject empty/whitespace-only patterns up front. rg treats '' as a
+    # match-all regex, which dumps EVERY line of EVERY file into the output —
+    # wasting thousands of context tokens and never matching caller intent.
+    # An empty search term is almost always a bug in the calling code.
+    if not pattern or not str(pattern).strip():
+        return "[ERROR] Search pattern is empty — provide a pattern to search for"
+
     # Validate the search path up front. Ripgrep returns exit code 2 with an
     # opaque "IO error ... os error 2" message for missing paths, which the
     # LLM can't interpret. A clear not-found message is far more actionable.
