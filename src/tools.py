@@ -36,6 +36,17 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
     # ran with no output or was never valid — leading to confused retries.
     if not command or not str(command).strip():
         return "[ERROR] Empty command — nothing to run"
+    # Resolve workdir up front. If workdir is invalid, subprocess.run raises
+    # FileNotFoundError ([Errno 2]) or NotADirectoryError ([Errno 20]) with
+    # cryptic messages that the LLM can't interpret. Translate to clear
+    # messages naming the bad path so the caller knows what to fix.
+    cwd = workdir or os.getcwd()
+    if workdir:
+        wd_path = Path(workdir)
+        if not wd_path.exists():
+            return f"[ERROR] Working directory does not exist: {workdir}"
+        if not wd_path.is_dir():
+            return f"[ERROR] Working directory is not a directory (it is a file): {workdir}"
     try:
         result = subprocess.run(
             command,
@@ -43,7 +54,7 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
             capture_output=True,
             text=True,
             timeout=timeout,
-            cwd=workdir or os.getcwd(),
+            cwd=cwd,
         )
         output = ""
         if result.stdout:
