@@ -16,6 +16,50 @@ from pathlib import Path
 from typing import Any
 
 
+def _to_int(value: Any, name: str, default: int | None = None) -> int:
+    """Coerce a tool parameter to int, tolerating LLM type mistakes.
+
+    LLMs sometimes send numeric params as JSON strings (e.g. {"timeout": "60"})
+    or as None. Without coercion, these crash the clamp logic with a cryptic
+    TypeError ("'<' not supported between instances of 'str' and 'int'") that
+    leaks Python internals into the tool output.
+
+    - int → returned as-is.
+    - numeric string ("60", " 12 ") → parsed to int.
+    - None → returned as `default` (must be provided for optional params).
+    - anything else → raises ValueError with a clear, actionable message.
+      Tools have a top-level try/except that turns this into "[ERROR] ...".
+    """
+    if value is None:
+        if default is not None:
+            return default
+        raise ValueError(f"{name} is required")
+    if isinstance(value, bool):
+        # bool is a subclass of int but almost never the intended type for
+        # numeric params; reject to avoid silent True→1 coercion surprises.
+        raise ValueError(f"{name} must be a number, got {value!r} (bool)")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        # Accept floats (e.g. 60.0) by truncating — a timeout of 60.5 is
+        # meaningless, and int() is what subprocess timeout expects anyway.
+        return int(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        try:
+            # int() handles "60", "-3"; float().is_integer() catches "60.0"
+            return int(stripped)
+        except ValueError:
+            try:
+                f = float(stripped)
+            except ValueError:
+                raise ValueError(
+                    f"{name} must be a number, got {value!r}"
+                ) from None
+            return int(f)
+    raise ValueError(f"{name} must be a number, got {type(value).__name__}")
+
+
 # ─── Tool implementations ────────────────────────────────────────────
 
 def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> str:
@@ -29,6 +73,12 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
     Returns:
         Combined stdout + stderr, truncated to 50KB.
     """
+    # Coerce timeout — LLMs sometimes send it as a string ("60"). A raw
+    # min/max on a str crashes with a cryptic TypeError.
+    try:
+        timeout = _to_int(timeout, "timeout", default=120)
+    except ValueError as e:
+        return f"[ERROR] {e}"
     # Clamp timeout to reasonable range — LLM could send absurd values
     timeout = max(1, min(timeout, 600))
     # Reject empty/whitespace commands up front. Without this, subprocess.run("")
@@ -102,6 +152,12 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
     Returns:
         File content with line numbers, or error message.
     """
+    # Coerce numeric params — LLMs sometimes send them as strings.
+    try:
+        limit = _to_int(limit, "limit", default=500)
+        offset = _to_int(offset, "offset", default=1)
+    except ValueError as e:
+        return f"[ERROR] {e}"
     limit = min(limit, 2000)
     # Clamp limit to >=1. A non-positive limit produced nonsensical output:
     # limit=0 → "[Showing lines 1-0 of N]" (empty range), and limit=-3 →
@@ -379,6 +435,13 @@ def tool_search(
     Returns:
         Matching lines with file paths and line numbers.
     """
+    # Coerce numeric params — LLMs sometimes send them as strings, which
+    # crashes the max() clamps below with a cryptic TypeError.
+    try:
+        context = _to_int(context, "context", default=0)
+        max_results = _to_int(max_results, "max_results", default=50)
+    except ValueError as e:
+        return f"[ERROR] {e}"
     # Clamp context to non-negative
     context = max(context, 0)
     # Clamp max_results to >=1. Negative values crash rg ("value is not a
@@ -510,6 +573,10 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
         Sorted file listing with sizes.
     """
     try:
+        # Coerce max_depth — LLMs sometimes send it as a string. The <=0
+        # comparison below crashes on str with a cryptic TypeError.
+        if max_depth is not None:
+            max_depth = _to_int(max_depth, "max_depth")
         # Clamp max_depth: treat <=0 (or None) as 'no limit'. Negative values
         # break find ('-maxdepth: value must be positive') and the os.walk
         # fallback's depth>=max_depth check is always true for negatives,
@@ -594,10 +661,9 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
         List of matching file paths, sorted alphabetically.
     """
     try:
-        # Clamp max_results to >=1. A value of 0 or negative produces an empty
-        # result and the caller reports "[No files found matching pattern]"
-        # even when matching files exist — misleading.
-        max_results = max(1, max_results)
+        # Coerce then clamp max_results. LLMs sometimes send it as a string;
+        # max() on a str crashes with a cryptic TypeError.
+        max_results = max(1, _to_int(max_results, "max_results", default=100))
         p = Path(path)
         if not p.exists():
             return f"[ERROR] Path not found: {path}"
