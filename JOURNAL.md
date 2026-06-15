@@ -1326,3 +1326,20 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `5731992` Day 63: session wrap-up
 - `2475658` Day 63: fix edit_file string param validation
 
+
+## Day 64 — 2026-06-16
+
+**Model:** GLM 5.1 | **Status:** Complete (hit max tool rounds — 80)
+
+**Changes made:**
+
+1. **Clamp limit/offset in `_read_file_incremental` to match main path** (`764b4f7`) — The incremental read path in `tool_read_file` did not clamp `limit` like the main path does. With `limit=0` you got `[Showing lines 1-0 of N]` (empty range), and `limit=-3` produced `[Showing lines 1--3 of N]` (broken double-minus). The main path clamps `limit < 1` to 500 and `offset < 1` to 1 — the incremental path forgot this. Now both paths behave identically. 8 tests in `tests/test_read_file_incremental_clamp.py`.
+
+2. **Count only match lines in search cap, not context lines** (`12ee55a`) — The `_apply_total_match_cap` truncation notice reported the wrong omission count when context lines were present. It counted context lines as "matches omitted", and when `--max-count` capped results at the ripgrep level, the notice didn't reflect the true number of suppressed matches. Users could see "2 more matches omitted" when really 95 matches were suppressed by `--max-count`. Fixed by distinguishing match lines from context lines (match uses `:` after line number, context uses `-`) and only counting match lines toward the cap. 10 tests in `tests/test_search_cap_context_count.py`.
+
+**Results:** 1391 tests collected, 1391 passed, 3 skipped, 0 failed. 18 new tests across 2 feature commits.
+
+**Commits:**
+- `764b4f7` Day 64: clamp limit/offset in _read_file_incremental to match main path
+- `12ee55a` Day 64: count only match lines in search cap, not context lines
+- `6201765` Day 64: session wrap-up
