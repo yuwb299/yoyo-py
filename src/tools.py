@@ -558,18 +558,37 @@ def tool_search(
         return f"[ERROR] {e}"
 
 
+# Detect rg match vs context lines by the separator that follows the line
+# number. With --line-number:
+#   match line:   path:NUM:content   or   NUM:content   (single file, no path)
+#   context line: path-NUM-content   or   NUM-content
+# The number is wrapped in ':' for matches and '-' for context. A match line
+# therefore matches `:\d+:` (path:num:) OR starts with `\d+:` (num: with no
+# path). Context lines never have a ':' immediately after their digits.
+import re as _re
+_MATCH_LINE_RE = _re.compile(r"^(?:.*[:])?\d+:")
+
+
+def _is_match_line(line: str) -> bool:
+    """Return True if an rg output line is a match (not a context line)."""
+    return bool(_MATCH_LINE_RE.match(line))
+
+
 def _apply_total_match_cap(raw_output: str, max_results: int) -> str:
     """Enforce a total cap on the number of match lines returned.
 
     rg's --max-count caps per-file matches, not the total. This helper takes
-    raw rg/grep output and trims it to at most `max_results` match lines,
-    appending a truncation notice so the LLM knows more matches exist and
-    can re-search with a higher cap or a more specific pattern if needed.
+    raw rg/grep output and trims it to at most `max_results` MATCH lines
+    (context lines don't count toward the cap), preserving the context around
+    the kept matches. A truncation notice is appended when matches are dropped
+    so the LLM knows more exist and can re-search with a higher cap or a
+    narrower pattern.
 
-    Match lines are lines produced by `rg --line-number` (format:
-    `path:linenum:content` or `path-linenum-content` for context). We count
-    a "match" as any line whose separator is `:` (the actual hit), since
-    context lines use `-`. For grep -n output the format is the same.
+    Match vs context is distinguished by the separator after the line number:
+    ':' for matches, '-' for context (rg --line-number convention). Counting
+    only matches matters because with --context, the raw output interleaves
+    context lines that must NOT be reported as "omitted matches" — that
+    previously produced a misleadingly small/inflated omitted count.
     """
     if not raw_output:
         return ""
@@ -578,22 +597,26 @@ def _apply_total_match_cap(raw_output: str, max_results: int) -> str:
     if not lines:
         return ""
 
-    # Identify match lines vs context/separator lines.
-    # Match line format:  path:NUM:content  (rg) or path:content (grep)
-    # Context line format: path-NUM-content (rg only, with --context)
-    # We can't perfectly distinguish without parsing, but we can cap on the
-    # TOTAL line count which is a safe upper bound on match lines and matches
-    # user intent (they asked for at most N results).
-    total = len(lines)
-    if total <= max_results:
+    # Count real match lines (context lines excluded from the cap).
+    match_indices = [i for i, ln in enumerate(lines) if _is_match_line(ln)]
+    total_matches = len(match_indices)
+
+    # Under the cap (or no matches to cap) — return everything, just size-bounded.
+    if total_matches <= max_results:
         return _truncate(raw_output.strip(), 50000)
 
-    kept = lines[:max_results]
-    omitted = total - max_results
+    # Keep lines up to and including the max_results-th match, so the last
+    # kept match retains its trailing context lines.
+    cut_after = match_indices[max_results - 1]
+    kept = lines[: cut_after + 1]
+    omitted = total_matches - max_results
     body = "\n".join(kept)
-    # Mention the cap value and how many lines were dropped, so the LLM/user
-    # can decide whether to narrow the pattern or raise max_results.
-    notice = f"\n... [{omitted} more match(es) omitted — raise max_results (currently {max_results}) or narrow the pattern to see them]"
+    # Report omitted MATCHES (not lines), and note --max-count may have hidden
+    # even more at the per-file level — the caller can raise max_results to see.
+    notice = (
+        f"\n... [{omitted} more match(es) omitted — raise max_results "
+        f"(currently {max_results}) or narrow the pattern to see them]"
+    )
     return _truncate(body + notice, 50000)
 
 
