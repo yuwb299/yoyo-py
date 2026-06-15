@@ -280,11 +280,18 @@ class Agent:
 
             except Exception as e:
                 error_msg = f"Stream error: {e}"
-                # Save partial assistant content if any, so conversation stays valid
+                # Save partial assistant content if any, so conversation stays valid.
+                # The conditional must group the concatenation explicitly: without
+                # parens, Python parses it correctly (the ternary binds looser than
+                # '+'), but the intent is easy to misread. Make it explicit.
+                if assistant_content:
+                    saved_content = assistant_content + f"\n[error: {error_msg}]"
+                else:
+                    saved_content = f"[error: {error_msg}]"
                 self.state.usage.add(round_usage)
                 self.state.messages.append({
                     "role": "assistant",
-                    "content": assistant_content + f"\n[error: {error_msg}]" if assistant_content else f"[error: {error_msg}]",
+                    "content": saved_content,
                 })
                 yield (AgentEvent.ERROR, error_msg)
                 return
