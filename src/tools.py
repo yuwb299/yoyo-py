@@ -394,6 +394,11 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
         Diff-style preview of the change.
     """
     try:
+        # Validate string param types up front — str.replace's error
+        # ("argument 2 must be str, not list") doesn't name which param.
+        old_string = _to_str(old_string, "old_string")
+        new_string = _to_str(new_string, "new_string")
+
         p = Path(path)
         if not p.exists():
             return f"[ERROR] File not found: {path}"
