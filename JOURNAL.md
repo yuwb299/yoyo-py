@@ -1303,3 +1303,26 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `d63c127` Day 62: Reject empty/whitespace search patterns in tool_search
 - `4cc0dc0` Day 62: session wrap-up
 
+## Day 63 — 2026-06-15
+
+**Model:** GLM 5.1 | **Status:** Complete
+
+**Changes made:**
+
+1. **read_file on empty file no longer reports error** (`23d7208`) — An empty file is valid and readable, but `tool_read_file` returned `[ERROR] Offset 1 is past end of file` because the empty-file edge case wasn't handled. Now returns a clean header with `[empty file]`. 4 tests in `tests/test_read_empty_file.py`.
+
+2. **Coerce numeric tool params to handle LLM string values** (`87fa090`) — LLMs sometimes send numeric params as JSON strings (e.g. `{"timeout": "60"}`) or as None. Previously these crashed clamp logic with cryptic TypeErrors. Added `_to_int()` helper that coerces int, float, and numeric strings; rejects bool and non-numeric strings with clear ValueError. Applied to bash timeout, read_file offset/limit, glob/list_files max_results/max_depth, and search max_results/context. 9 tests in `tests/test_tool_numeric_param_types.py`.
+
+3. **Clarify stream-error partial-content save in agent loop** (`bc17f67`) — The conditional expression saving partial assistant content on stream error relied on operator precedence (ternary binds looser than +). Refactored to explicit if/else with clear variable names. 2 tests in `tests/test_agent_partial_content_error.py`.
+
+4. **String param type validation for write_file/edit_file** (wrap-up `5731992`, post-fix `2475658`) — Added `_to_str()` helper that rejects non-string types (int, list, None) with parameter-named error messages, so the LLM knows exactly which argument was wrong on retry. Wired into `write_file(content)` in the wrap-up commit; `edit_file(old_string, new_string)` was not wired up in time (hit tool-round limit), causing 3 test failures. Fixed post-evolution by adding `_to_str` calls for `old_string` and `new_string`. 7 tests in `tests/test_tool_string_param_types.py`.
+
+**Results:** 1382 tests collected, 1382 passed, 3 skipped, 0 failed. ~22 new tests across 3 feature commits + wrap-up + post-fix.
+
+**Commits:**
+- `23d7208` Day 63: read_file on empty file no longer reports error
+- `87fa090` Day 63: coerce numeric tool params to handle LLM string values
+- `bc17f67` Day 63: clarify stream-error partial-content save in agent loop
+- `5731992` Day 63: session wrap-up
+- `2475658` Day 63: fix edit_file string param validation
+
