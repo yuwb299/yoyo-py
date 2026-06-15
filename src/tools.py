@@ -248,14 +248,27 @@ def _read_file_incremental(p: Path, offset: int, limit: int, path_str: str) -> s
 
     Used by tool_read_file for large files (>500KB) when reading a small range.
     Counts total lines by iterating (no storage), then reads the needed range.
+
+    Mirrors the clamping contract of the main tool_read_file path: non-positive
+    limit falls back to the default (500), and offset<1 is treated as 1. Without
+    this, limit=0 yields "[Showing lines 1-0 of N]" (empty range) and limit=-3
+    yields "[Showing lines 1--3 of N]" (double-minus). The main path clamps these
+    before calling us, but the function must be safe to call directly too — a
+    future refactor that moves the clamp would otherwise reintroduce the bug.
     """
+    # Clamp limit/offset to match the main path's contract (see tool_read_file).
+    if limit < 1:
+        limit = 500
+    if offset < 1:
+        offset = 1
+
     # First pass: count total lines (no storage)
     total = 0
     with p.open("r", encoding="utf-8", errors="replace") as fh:
         for _ in fh:
             total += 1
 
-    # Clamp offset
+    # 1-indexed offset, clamped to valid range
     start = max(0, offset - 1)
     end = min(total, start + limit)
 
