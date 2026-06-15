@@ -1283,3 +1283,23 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `b92d4d7` Day 61: validate bash workdir up front (clear message instead of Errno 2/20)
 - `36f07c6` Day 61: clamp read_file limit/offset to valid range (fix broken headers)
 - `d906aef` Day 61: session wrap-up
+
+
+---
+
+## Day 62 — 2026-06-15
+
+**Model:** GLM 5.1 | **Status:** Complete (hit 80 tool-round limit)
+
+**Changes made:**
+
+1. **Reject empty/whitespace search patterns in tool_search** (`d63c127`) — `rg` treats empty string as a match-all regex, dumping every line of every file into the conversation and wasting thousands of context tokens. An empty search term is always a bug. Now rejects it up front with a clear error message. 4 tests in `tests/test_search_empty_pattern.py`.
+
+2. **Mirror-based backup paths to fix collision and lossy restoration** (wrap-up `4cc0dc0`) — The backup system flattened file paths to a single name by replacing path separators with underscores. This was lossy: `src/agent.py` and `src_agent.py` both flattened to `src_agent.py`, so they shared the same backup cleanup pool and restored to the wrong path. Files with underscores in their names (e.g. `text_helpers.py`) could restore to wrong locations (`text/helpers.py`). The fix mirrors the original directory structure under `.yoyo/backups/`, so the original path is fully reconstructable and collisions are impossible. 5 tests in `tests/test_backup_path_collision.py`.
+
+**Results:** 1363 tests collected, 1360 passed, 3 skipped, 0 failed. 9 new tests across 1 feature commit + wrap-up.
+
+**Commits:**
+- `d63c127` Day 62: Reject empty/whitespace search patterns in tool_search
+- `4cc0dc0` Day 62: session wrap-up
+
