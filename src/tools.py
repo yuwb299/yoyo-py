@@ -138,6 +138,12 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
         lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
         total = len(lines)
 
+        # Empty file is valid — just report zero lines. Reporting "[ERROR]
+        # Offset 1 is past end of file" for a perfectly readable empty file
+        # misleads the LLM into thinking the read failed.
+        if total == 0:
+            return f"[File: {path} (0 lines)]\n[empty file]"
+
         # 1-indexed offset
         start = max(0, offset - 1)
 
@@ -178,6 +184,11 @@ def _read_file_incremental(p: Path, offset: int, limit: int, path_str: str) -> s
     # Clamp offset
     start = max(0, offset - 1)
     end = min(total, start + limit)
+
+    # Empty file is valid — report zero lines without an error. (Large empty
+    # files are rare but possible; keep behavior consistent with the main path.)
+    if total == 0:
+        return f"[File: {path_str} (0 lines)]\n[empty file]"
 
     if start >= total:
         return f"[File: {path_str} ({total} lines)]\n[ERROR] Offset {offset} is past end of file"
