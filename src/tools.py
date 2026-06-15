@@ -60,6 +60,24 @@ def _to_int(value: Any, name: str, default: int | None = None) -> int:
     raise ValueError(f"{name} must be a number, got {type(value).__name__}")
 
 
+def _to_str(value: Any, name: str) -> str:
+    """Coerce a tool parameter to str, rejecting non-string types clearly.
+
+    String params (path, content, old_string, new_string, pattern) must be
+    actual strings. When the LLM sends an int/list/None, the raw error from
+    the underlying call (pathlib's "data must be str", or str.replace's
+    "argument 2 must be str") is generic and doesn't name which argument was
+    wrong. This helper raises a param-named ValueError so the LLM knows exactly
+    what to fix on retry.
+
+    Note: we deliberately do NOT str() arbitrary objects — silently coercing
+    a list to "[1, 2]" would write garbage to a file. Better to reject.
+    """
+    if isinstance(value, str):
+        return value
+    raise ValueError(f"{name} must be a string, got {type(value).__name__}")
+
+
 # ─── Tool implementations ────────────────────────────────────────────
 
 def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> str:
@@ -278,6 +296,9 @@ def tool_write_file(path: str, content: str) -> str:
         Confirmation message with line count.
     """
     try:
+        # Validate content type up front — pathlib.write_text's error
+        # ("data must be str, not int") doesn't name which argument failed.
+        content = _to_str(content, "content")
         p = Path(path)
         # Back up existing file before overwriting — safety net for LLM mistakes
         _backup_file(p)
