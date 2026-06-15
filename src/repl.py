@@ -2076,7 +2076,7 @@ def _run_backups_command(args: str) -> str:
         /backups show N     Show content of backup #N
         /backups restore N  Restore backup #N to original file path
     """
-    from .tools import _BACKUP_SUBDIR, _BACKUP_DIR_NAME, _format_size
+    from .tools import _BACKUP_SUBDIR, _BACKUP_DIR_NAME, _format_size, _backup_to_orig_path, _backup_timestamp
 
     backup_dir = Path(_BACKUP_DIR_NAME) / _BACKUP_SUBDIR
     parts = args.strip().split()
@@ -2092,7 +2092,8 @@ def _run_backups_command(args: str) -> str:
     if not backup_dir.exists() or not backup_dir.is_dir():
         return f"{DIM}No backups found.{RESET}"
 
-    backups = sorted(backup_dir.iterdir(), key=lambda f: f.name)
+    # Recurse so mirrored subdirs (src/agent.py_<ts>.bak) are included.
+    backups = sorted(backup_dir.rglob("*.bak"), key=lambda f: str(f.relative_to(backup_dir)))
     if not backups:
         return f"{DIM}No backups found.{RESET}"
 
@@ -2102,14 +2103,11 @@ def _run_backups_command(args: str) -> str:
 
     for i, b in enumerate(backups, 1):
         size = b.stat().st_size
-        # Parse the backup name to extract the original filename and timestamp
-        name = b.stem  # e.g. "test_txt_20260613_143022"
-        # Remove timestamp suffix (YYYYMMDD_HHMMSS[_N])
-        ts_match = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", name)
-        if ts_match:
-            orig_name = ts_match.group(1).replace("_", os.sep)
-            ts = ts_match.group(2)
-            # Format timestamp nicely
+        # Reconstruct the original path from the mirrored layout, and extract
+        # the timestamp from the filename suffix.
+        orig_name = _backup_to_orig_path(b)
+        ts = _backup_timestamp(b)
+        if ts:
             try:
                 from datetime import datetime
                 dt = datetime.strptime(ts, "%Y%m%d_%H%M%S")
@@ -2117,7 +2115,6 @@ def _run_backups_command(args: str) -> str:
             except ValueError:
                 ts_display = ts
         else:
-            orig_name = name
             ts_display = "unknown"
         lines.append(f"  {CYAN}{i:>3}{RESET}  {orig_name}  {DIM}({ts_display}, {_format_size(size)}){RESET}")
 
@@ -2126,6 +2123,8 @@ def _run_backups_command(args: str) -> str:
 
 def _backups_show(backup_dir: Path, args: list[str]) -> str:
     """Show content of a backup by index number."""
+    from .tools import _backup_to_orig_path
+
     if not args:
         return f"{YELLOW}Usage: /backups show <N>{RESET}"
 
@@ -2137,7 +2136,8 @@ def _backups_show(backup_dir: Path, args: list[str]) -> str:
     if not backup_dir.exists():
         return f"{RED}No backups found{RESET}"
 
-    backups = sorted(backup_dir.iterdir(), key=lambda f: f.name)
+    # Recurse so mirrored subdirs are included.
+    backups = sorted(backup_dir.rglob("*.bak"), key=lambda f: str(f.relative_to(backup_dir)))
     if idx < 1 or idx > len(backups):
         return f"{RED}Backup #{idx} not found ({len(backups)} available){RESET}"
 
@@ -2147,9 +2147,7 @@ def _backups_show(backup_dir: Path, args: list[str]) -> str:
     except Exception as e:
         return f"{RED}Error reading backup: {e}{RESET}"
 
-    name = backup.stem
-    ts_match = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", name)
-    orig_name = ts_match.group(1).replace("_", os.sep) if ts_match else name
+    orig_name = _backup_to_orig_path(backup)
 
     lines = [f"{BOLD}Backup #{idx}{RESET} → {orig_name}"]
     lines.append(f"{DIM}{'─' * 40}{RESET}")
@@ -2164,6 +2162,8 @@ def _backups_show(backup_dir: Path, args: list[str]) -> str:
 
 def _backups_restore(backup_dir: Path, args: list[str]) -> str:
     """Restore a backup by index number to its original file path."""
+    from .tools import _backup_to_orig_path, _backup_file
+
     if not args:
         return f"{YELLOW}Usage: /backups restore <N>{RESET}"
 
@@ -2175,24 +2175,22 @@ def _backups_restore(backup_dir: Path, args: list[str]) -> str:
     if not backup_dir.exists():
         return f"{RED}No backups found{RESET}"
 
-    backups = sorted(backup_dir.iterdir(), key=lambda f: f.name)
+    # Recurse so mirrored subdirs are included.
+    backups = sorted(backup_dir.rglob("*.bak"), key=lambda f: str(f.relative_to(backup_dir)))
     if idx < 1 or idx > len(backups):
         return f"{RED}Backup #{idx} not found ({len(backups)} available){RESET}"
 
     backup = backups[idx - 1]
-    name = backup.stem
-    ts_match = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", name)
-    if not ts_match:
+    orig_name = _backup_to_orig_path(backup)
+    if not orig_name:
         return f"{RED}Cannot determine original file path from backup name{RESET}"
 
-    orig_name = ts_match.group(1).replace("_", os.sep)
     orig_path = Path(orig_name)
 
     try:
         import shutil
         # Back up the current file before restoring (so we don't lose it either)
         if orig_path.exists():
-            from .tools import _backup_file
             _backup_file(orig_path)
 
         shutil.copy2(str(backup), str(orig_path))

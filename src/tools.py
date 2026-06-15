@@ -685,11 +685,80 @@ _BACKUP_SUBDIR = "backups"
 _MAX_BACKUPS_PER_FILE = 10
 
 
+def _backup_relpath(path: Path) -> Path:
+    """Return the path under .yoyo/backups/ that mirrors `path`'s location.
+
+    We MIRROR the original directory structure instead of flattening with
+    underscores, because flattening is lossy:
+      - 'src/agent.py' and 'src_agent.py' both flatten to 'src_agent.py',
+        colliding in the backup pool and sharing the cleanup cap.
+      - A path like 'utils/text_helpers.py' restores to the WRONG location
+        ('utils/text/helpers.py') because underscore→separator is ambiguous.
+
+    Mirroring keeps the original path fully reconstructable and collision-free.
+
+    Absolute paths are made relative to the current working directory so the
+    backup tree stays self-contained and portable.
+    """
+    p = Path(path)
+    try:
+        p = p.relative_to(Path.cwd())
+    except ValueError:
+        # Not under cwd (e.g. '/tmp/x') — use it as-is, sanitized only for
+        # leading os.sep so it doesn't escape the backup root.
+        sp = str(p).lstrip("/").lstrip(os.sep)
+        p = Path(sp) if sp else Path(p.name)
+    return p
+
+
+def _backup_timestamp(backup_path: Path) -> str | None:
+    """Extract the YYYYMMDD_HHMMSS timestamp from a backup filename.
+
+    Returns None if the filename has no recognizable timestamp suffix.
+    """
+    import re
+    m = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?\.bak$", backup_path.name)
+    return m.group(2) if m else None
+
+
+def _backup_to_orig_path(backup_path: Path) -> str:
+    """Reconstruct the original file path from a mirrored backup path.
+
+    Given e.g. '.yoyo/backups/src/agent.py_20260613_143022.bak', returns
+    'src/agent.py'. Strips the '_YYYYMMDD_HHMMSS[_N]' timestamp suffix from
+    the filename and rejoins with the mirrored parent directories.
+
+    Returns the path relative to the cwd (as it was when the backup was made).
+    """
+    import re
+    # Walk up until we find the backups/ root, then everything below is the
+    # mirrored original structure. This is robust to nested original paths.
+    parts = backup_path.parts
+    try:
+        idx = parts.index(_BACKUP_SUBDIR)
+    except ValueError:
+        # Not under a backups/ dir — fall back to the filename stem
+        return backup_path.stem
+    rel_parts = parts[idx + 1:]  # ('src', 'agent.py_20260613_143022.bak')
+    if not rel_parts:
+        return backup_path.stem
+    *dir_parts, fname = rel_parts
+    stem = fname[:-len(".bak")] if fname.endswith(".bak") else fname
+    m = re.match(r"^(.+?)_(\d{8}_\d{6})(?:_\d+)?$", stem)
+    name = m.group(1) if m else stem
+    if dir_parts:
+        return str(Path(*dir_parts) / name)
+    return name
+
+
 def _backup_file(path: Path) -> None:
     """Back up a file to .yoyo/backups/ before overwriting.
 
     Only backs up if the file exists. Creates the backup directory if needed.
     Cleans up old backups beyond _MAX_BACKUPS_PER_FILE for the same file.
+
+    Backups mirror the original directory structure under .yoyo/backups/
+    (see _backup_relpath for why we don't flatten with underscores).
     """
     if not path.exists() or not path.is_file():
         return
@@ -706,29 +775,30 @@ def _backup_file(path: Path) -> None:
         from datetime import datetime
 
         backup_dir = Path(_BACKUP_DIR_NAME) / _BACKUP_SUBDIR
-        backup_dir.mkdir(parents=True, exist_ok=True)
+        rel = _backup_relpath(path)
+        # Place the backup mirroring the structure:
+        #   .yoyo/backups/src/agent.py_20260613_143022.bak
+        # The parent dirs (e.g. 'src') are created so restore can reconstruct
+        # the exact original path from the backup's location.
+        backup_path = backup_dir / rel.parent / f"{rel.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.bak"
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create a safe filename: sanitize the original path
-        # e.g. "src/agent.py" -> "src_agent.py_20260613_143022_001.bak"
-        safe_name = str(path).replace(os.sep, "_").replace("/", "_")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"{safe_name}_{timestamp}.bak"
-
-        # Avoid collision with existing backups (rare but possible)
+        # Avoid collision with existing backups (same second, same file)
         counter = 1
-        backup_path = backup_dir / backup_name
+        stem = backup_path.stem  # 'agent.py_20260613_143022'
         while backup_path.exists():
-            backup_name = f"{safe_name}_{timestamp}_{counter}.bak"
-            backup_path = backup_dir / backup_name
+            backup_path = backup_path.with_name(f"{stem}_{counter}.bak")
             counter += 1
 
         import shutil
         shutil.copy2(str(path), str(backup_path))
 
-        # Clean up old backups for this file (keep most recent N)
-        prefix = safe_name + "_"
+        # Clean up old backups for THIS file only (keep most recent N).
+        # Glob the file's own backup dir, matching '<name>_*.bak'. Because each
+        # file mirrors into its own subdir, unrelated files never share a pool.
+        glob_prefix = rel.name + "_"
         existing = sorted(
-            [f for f in backup_dir.iterdir() if f.name.startswith(prefix)],
+            backup_path.parent.glob(f"{glob_prefix}*.bak"),
             key=lambda f: f.name,
         )
         while len(existing) > _MAX_BACKUPS_PER_FILE:
