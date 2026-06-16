@@ -603,6 +603,13 @@ def tool_search(
         if context > 0:
             cmd.extend(["--context", str(context)])
         if file_glob:
+            # Coerce file_glob to str — if LLM sends an int/dict, subprocess.run
+            # raises a cryptic TypeError ("expected str, bytes or os.PathLike")
+            # naming none of our params.
+            try:
+                file_glob = _to_str(file_glob, "file_glob")
+            except ValueError as e:
+                return f"[ERROR] {e}"
             cmd.extend(["--glob", file_glob])
         cmd.extend([pattern, path])
 

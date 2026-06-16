@@ -111,3 +111,18 @@ class TestMkdirBoolCoercion:
         result = tool_mkdir(str(nested), parents="true")
         assert "[OK]" in result
         assert nested.exists()
+
+
+# ── search file_glob coercion ──────────────────────────────────────────
+
+
+class TestSearchFileGlobCoercion:
+    def test_file_glob_int_returns_error(self, tmp_path):
+        """LLM sends file_glob as int — should get a clear param-named error."""
+        from src.tools import tool_search
+        f = tmp_path / "test.py"
+        f.write_text("hello world")
+
+        result = tool_search("hello", path=str(tmp_path), file_glob=123)
+        assert "[ERROR]" in result
+        assert "file_glob" in result
