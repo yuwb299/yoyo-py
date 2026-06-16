@@ -109,6 +109,13 @@ def _to_bool(value: Any, name: str) -> bool:
         if value == 0:
             return False
         raise ValueError(f"{name} must be a boolean, got int {value}")
+    if isinstance(value, float):
+        # Accept 1.0/0.0 — some JSON serializers produce floats for whole numbers
+        if value == 1.0:
+            return True
+        if value == 0.0:
+            return False
+        raise ValueError(f"{name} must be a boolean, got float {value}")
     if isinstance(value, str):
         lower = value.strip().lower()
         if lower in _TRUE_STRINGS:

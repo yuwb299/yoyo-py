@@ -42,6 +42,10 @@ class TestToBool:
         assert _to_bool(1, "x") is True
         assert _to_bool(0, "x") is False
 
+    def test_floats(self):
+        assert _to_bool(1.0, "x") is True
+        assert _to_bool(0.0, "x") is False
+
     def test_invalid_raises(self):
         import pytest
         with pytest.raises(ValueError, match="replace_all"):
