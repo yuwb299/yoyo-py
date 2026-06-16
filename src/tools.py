@@ -239,6 +239,12 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
         offset = _to_int(offset, "offset", default=1)
     except ValueError as e:
         return f"[ERROR] {e}"
+    # Coerce path to str — a non-string path (int, list, None) leaks pathlib's
+    # "expected str, bytes or os.PathLike object" with no param name.
+    try:
+        path = _to_str(path, "path")
+    except ValueError as e:
+        return f"[ERROR] {e}"
     limit = min(limit, 2000)
     # Clamp limit to >=1. A non-positive limit produced nonsensical output:
     # limit=0 → "[Showing lines 1-0 of N]" (empty range), and limit=-3 →
@@ -375,6 +381,9 @@ def tool_write_file(path: str, content: str) -> str:
         # Validate content type up front — pathlib.write_text's error
         # ("data must be str, not int") doesn't name which argument failed.
         content = _to_str(content, "content")
+        # Coerce path to str — a non-string path leaks pathlib's "expected
+        # str, bytes or os.PathLike object" with no param name.
+        path = _to_str(path, "path")
         p = Path(path)
         # Back up existing file before overwriting — safety net for LLM mistakes
         _backup_file(p)
@@ -402,6 +411,12 @@ def tool_mkdir(path: str, parents: bool = True) -> str:
         # parent dirs when the LLM intended not to.
         try:
             parents = _to_bool(parents, "parents")
+        except ValueError as e:
+            return f"[ERROR] {e}"
+        # Coerce path to str — a non-string path leaks pathlib's "expected
+        # str, bytes or os.PathLike object" with no param name.
+        try:
+            path = _to_str(path, "path")
         except ValueError as e:
             return f"[ERROR] {e}"
         p = Path(path)
@@ -435,6 +450,10 @@ def tool_copy_file(source: str, destination: str) -> str:
     """
     try:
         import shutil
+        # Coerce path args — a non-string source/destination leaks pathlib's
+        # "expected str, bytes or os.PathLike object" with no param name.
+        source = _to_str(source, "source")
+        destination = _to_str(destination, "destination")
         src = Path(source)
         dst = Path(destination)
 
@@ -485,6 +504,9 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
         # ("argument 2 must be str, not list") doesn't name which param.
         old_string = _to_str(old_string, "old_string")
         new_string = _to_str(new_string, "new_string")
+        # Coerce path to str — a non-string path leaks pathlib's "expected
+        # str, bytes or os.PathLike object" with no param name.
+        path = _to_str(path, "path")
         # Coerce replace_all — LLMs sometimes send "false" as a string,
         # which Python treats as truthy, causing ALL occurrences to be
         # replaced instead of just one. Silent file corruption.
@@ -757,7 +779,12 @@ def tool_list_files(path: str = ".", glob_pattern: str | None = None, max_depth:
         # producing an empty result that gets mislabeled "[Empty directory]".
         if max_depth is not None and max_depth <= 0:
             max_depth = None
-
+        # Coerce path to str — a non-string path leaks pathlib's "expected
+        # str, bytes or os.PathLike object" with no param name.
+        path = _to_str(path, "path")
+        # Coerce glob_pattern if present — same reason as path.
+        if glob_pattern is not None:
+            glob_pattern = _to_str(glob_pattern, "glob_pattern")
         p = Path(path)
         if not p.exists():
             return f"[ERROR] Path not found: {path}"
@@ -848,6 +875,9 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
             show_sizes = _to_bool(show_sizes, "show_sizes")
         except ValueError as e:
             return f"[ERROR] {e}"
+        # Coerce path to str — a non-string path leaks pathlib's "expected
+        # str, bytes or os.PathLike object" with no param name.
+        path = _to_str(path, "path")
         p = Path(path)
         if not p.exists():
             return f"[ERROR] Path not found: {path}"
@@ -912,6 +942,10 @@ def tool_rename(source: str, destination: str) -> str:
         Confirmation or error message.
     """
     try:
+        # Coerce path args — a non-string source/destination leaks pathlib's
+        # "expected str, bytes or os.PathLike object" with no param name.
+        source = _to_str(source, "source")
+        destination = _to_str(destination, "destination")
         if not source:
             return "[ERROR] source path cannot be empty"
         if not destination:
