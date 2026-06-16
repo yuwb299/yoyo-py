@@ -583,13 +583,30 @@ def tool_search(
     if not pattern or not str(pattern).strip():
         return "[ERROR] Search pattern is empty — provide a pattern to search for"
 
+    # Coerce path to str up front. A non-string path (int, list, dict) used to
+    # raise an UNCAUGHT TypeError at Path(path) below — the try/except that
+    # wraps the rg invocation starts AFTER this block, so the exception escaped
+    # tool_search entirely and was only caught by the agent loop's generic
+    # handler as "[ERROR] Error executing tool_search: expected str, bytes or
+    # os.PathLike object" — a message that names neither `path` nor `tool_search`.
+    try:
+        path = _to_str(path, "path")
+    except ValueError as e:
+        return f"[ERROR] {e}"
+
+    # Treat empty/whitespace path as the current directory. An empty string
+    # otherwise leaks rg's raw "IO error for operation on : No such file"
+    # message (rg can't operate on an empty path), which is confusing and
+    # unactionable. Defaulting to '.' matches the documented behavior.
+    if not path or not path.strip():
+        path = "."
+
     # Validate the search path up front. Ripgrep returns exit code 2 with an
     # opaque "IO error ... os error 2" message for missing paths, which the
     # LLM can't interpret. A clear not-found message is far more actionable.
-    if path:
-        search_path = Path(path)
-        if not search_path.exists():
-            return f"[ERROR] Search path not found: {path}"
+    search_path = Path(path)
+    if not search_path.exists():
+        return f"[ERROR] Search path not found: {path}"
 
     try:
         # Build ripgrep command.
