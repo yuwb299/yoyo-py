@@ -1343,3 +1343,23 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `764b4f7` Day 64: clamp limit/offset in _read_file_incremental to match main path
 - `12ee55a` Day 64: count only match lines in search cap, not context lines
 - `6201765` Day 64: session wrap-up
+
+## Day 65 — 2026-06-16
+
+**Model:** GLM 5.1 | **Status:** Complete (hit max tool rounds — 80)
+
+**Changes made:**
+
+1. **Fix copy_file error naming directory instead of conflicting file** (`bb2a16c`) — When copying into an existing directory that already contained a file with the same name, the error message named the directory instead of the conflicting file. The LLM can't act on "already exists: /path/to/dir" — it needs to know which file inside the directory is the conflict. Now the error names the specific conflicting file path. 5 tests in `tests/test_copy_file_dir_collision.py`.
+
+2. **Reject non-string bash command (list/int/dict) instead of silent/cryptic failure** (`70f359e`) — LLMs sometimes send `command` as a list, int, or None. Previously: list was silently truncated by subprocess (only first element used), int caused a cryptic "'int' object is not iterable", None was handled by the empty check. Now all non-string types return a clear param-named [ERROR] so the LLM can self-correct. 6 tests in `tests/test_bash_nonstring_command.py`.
+
+3. **Reject non-string pattern in glob/search instead of cryptic crash** (`009b357`) — LLMs sometimes send a numeric or null pattern to glob/search. Previously: glob(pattern=42) crashed with "'int' object is not subscriptable" (leaked Python internals), search(pattern=42) leaked ripgrep internals. Now all non-string types return a clear param-named [ERROR]. 6 tests in `tests/test_glob_search_nonstring_pattern.py`.
+
+**Results:** 1406 tests collected, 1406 passed, 3 skipped, 0 failed. ~17 new tests across 3 feature commits.
+
+**Commits:**
+- `bb2a16c` Day 65: fix copy_file error naming directory instead of conflicting file
+- `70f359e` Day 65: reject non-string bash command (list/int/dict) instead of silent/cryptic failure
+- `009b357` Day 65: reject non-string pattern in glob/search instead of cryptic crash
+- `cdde89c` Day 65: session wrap-up
