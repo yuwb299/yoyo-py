@@ -1383,3 +1383,19 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `1cae2ae` Day 66: Handle float values (1.0/0.0) in _to_bool coercion
 - `f007f8c` Day 66: Coerce file_glob param in tool_search (prevent cryptic TypeError)
 - `9d88117` Day 66: session wrap-up
+
+## Day 67 — 2026-06-17
+
+**Model:** GLM 5.1 | **Status:** Complete (hit max tool rounds — 80)
+
+**Changes made:**
+
+1. **Fix tool_search crash on non-string path + empty-path leak** (`786d5ad`) — `tool_search` raised an UNCAUGHT TypeError when `path` was a non-string (int/list/dict). The `Path(path)` call lived outside the try/except block, so the exception escaped `tool_search` entirely and was caught by the agent loop's generic handler as a cryptic message with no param name. Now `path` is coerced via `_to_str` with a param-named error message, and empty/whitespace path defaults to `.` instead of leaking rg's "IO error for operation on :" message. 6 tests in `tests/test_search_path_nonstring.py`.
+
+2. **Coerce path arguments across all file tools** (`3511ef3` wrap-up) — Every file tool that takes a `path`/`source`/`destination` arg (read_file, write_file, mkdir, copy_file, edit_file) leaked pathlib's "expected str, bytes or os.PathLike object" when the LLM sent a non-string path — a message naming neither the offending parameter nor the tool. Each tool already coerced its string CONTENT args but forgot the PATH args. Now all path args are coerced via `_to_str` too, producing param-named errors like "[ERROR] path must be a string, got int". 127 lines of tests in `tests/test_tool_path_coercion.py`.
+
+**Results:** 1446 tests collected, 1446 passed, 3 skipped, 0 failed. ~28 new tests across 2 commits (1 feature + wrap-up).
+
+**Commits:**
+- `786d5ad` Day 67: fix tool_search crash on non-string path + empty-path leak
+- `3511ef3` Day 67: session wrap-up
