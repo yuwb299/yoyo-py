@@ -78,6 +78,51 @@ def _to_str(value: Any, name: str) -> str:
     raise ValueError(f"{name} must be a string, got {type(value).__name__}")
 
 
+# Common truthy/falsy string spellings the LLM may send. Python's bool()
+# treats "false" and "0" as truthy (any non-empty string), which silently
+# corrupts files: edit_file with replace_all="false" replaces ALL matches.
+_TRUE_STRINGS = {"true", "yes", "1", "y", "t"}
+_FALSE_STRINGS = {"false", "no", "0", "n", "f", ""}
+
+
+def _to_bool(value: Any, name: str) -> bool:
+    """Coerce a tool parameter to bool, handling LLM string mistakes.
+
+    LLMs sometimes send boolean params as JSON strings ("true"/"false"),
+    as ints (0/1), or as None. Without coercion, Python's truthiness
+    rules are dangerous:
+      - bool("false") is True → edit_file replaces ALL occurrences
+      - bool("0") is True → mkdir creates parents when it shouldn't
+
+    This helper interprets common spellings correctly:
+      - Actual bool → returned as-is.
+      - "true"/"yes"/"1" (any case) → True.
+      - "false"/"no"/"0"/"" (any case) → False.
+      - int 1 → True, int 0 → False.
+      - Anything else → raises ValueError naming the param.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        raise ValueError(f"{name} must be a boolean, got int {value}")
+    if isinstance(value, str):
+        lower = value.strip().lower()
+        if lower in _TRUE_STRINGS:
+            return True
+        if lower in _FALSE_STRINGS:
+            return False
+        raise ValueError(
+            f"{name} must be a boolean (true/false), got {value!r}"
+        )
+    raise ValueError(
+        f"{name} must be a boolean, got {type(value).__name__}"
+    )
+
+
 # ─── Tool implementations ────────────────────────────────────────────
 
 def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> str:
@@ -345,6 +390,13 @@ def tool_mkdir(path: str, parents: bool = True) -> str:
         Confirmation or error message.
     """
     try:
+        # Coerce parents — LLMs sometimes send "false"/"true" as strings.
+        # bool("false") is True in Python, which would silently create
+        # parent dirs when the LLM intended not to.
+        try:
+            parents = _to_bool(parents, "parents")
+        except ValueError as e:
+            return f"[ERROR] {e}"
         p = Path(path)
         if p.exists():
             if p.is_dir():
@@ -426,6 +478,13 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
         # ("argument 2 must be str, not list") doesn't name which param.
         old_string = _to_str(old_string, "old_string")
         new_string = _to_str(new_string, "new_string")
+        # Coerce replace_all — LLMs sometimes send "false" as a string,
+        # which Python treats as truthy, causing ALL occurrences to be
+        # replaced instead of just one. Silent file corruption.
+        try:
+            replace_all = _to_bool(replace_all, "replace_all")
+        except ValueError as e:
+            return f"[ERROR] {e}"
 
         p = Path(path)
         if not p.exists():
@@ -752,6 +811,12 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
         # Coerce then clamp max_results. LLMs sometimes send it as a string;
         # max() on a str crashes with a cryptic TypeError.
         max_results = max(1, _to_int(max_results, "max_results", default=100))
+        # Coerce show_sizes — LLMs sometimes send "false"/"true" as strings.
+        # bool("false") is True, which would unexpectedly show file sizes.
+        try:
+            show_sizes = _to_bool(show_sizes, "show_sizes")
+        except ValueError as e:
+            return f"[ERROR] {e}"
         p = Path(path)
         if not p.exists():
             return f"[ERROR] Path not found: {path}"
