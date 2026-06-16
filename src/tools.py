@@ -378,7 +378,11 @@ def tool_copy_file(source: str, destination: str) -> str:
             dst = dst / src.name
 
         if dst.exists():
-            return f"[ERROR] Destination already exists: {destination}"
+            # Name the RESOLVED target (dst), not the raw `destination` arg.
+            # When destination was a directory, dst was resolved to dst/src.name
+            # above — reporting `destination` here would point at the directory,
+            # leaving the LLM unable to tell WHICH file inside it is the conflict.
+            return f"[ERROR] Destination already exists: {dst}"
 
         # Create parent directories if needed
         dst.parent.mkdir(parents=True, exist_ok=True)
