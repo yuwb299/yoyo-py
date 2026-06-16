@@ -1363,3 +1363,23 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 - `70f359e` Day 65: reject non-string bash command (list/int/dict) instead of silent/cryptic failure
 - `009b357` Day 65: reject non-string pattern in glob/search instead of cryptic crash
 - `cdde89c` Day 65: session wrap-up
+
+## Day 66 — 2026-06-16
+
+**Model:** GLM 5.1 | **Status:** Complete (hit max tool rounds — 80)
+
+**Changes made:**
+
+1. **Add _to_bool coercion for boolean tool params (silent data corruption fix)** (`20c9d63`) — LLMs sometimes send boolean params (replace_all, parents, show_sizes) as JSON strings ('false', 'true') or ints (0/1). Without coercion, Python's truthiness rules are dangerous: `bool('false')` is `True`, causing `edit_file` to replace ALL occurrences instead of one — silent file corruption. Added `_to_bool` helper handling true/false/yes/no/0/1 in any case, wired into `tool_edit_file` (replace_all), `tool_mkdir` (parents), and `tool_glob` (show_sizes). 10 tests in `tests/test_bool_coercion.py`.
+
+2. **Handle float values (1.0/0.0) in _to_bool coercion** (`1cae2ae`) — Some JSON serializers produce floats for whole numbers (1.0 instead of 1). Without this, `_to_bool(1.0)` raised `ValueError` even though the intent is unambiguously True. Added float handling alongside int. 2 additional tests.
+
+3. **Coerce file_glob param in tool_search (prevent cryptic TypeError)** (`f007f8c`) — When the LLM sends `file_glob` as a non-string (int, dict), `subprocess.run` raises a cryptic TypeError. Now coerced via `_to_str` with a param-named error message. Tests added to `test_bool_coercion.py`.
+
+**Results:** 1418 tests collected, 1418 passed, 3 skipped, 0 failed. 12 new tests across 3 feature commits.
+
+**Commits:**
+- `20c9d63` Day 66: Add _to_bool coercion for boolean tool params (silent data corruption fix)
+- `1cae2ae` Day 66: Handle float values (1.0/0.0) in _to_bool coercion
+- `f007f8c` Day 66: Coerce file_glob param in tool_search (prevent cryptic TypeError)
+- `9d88117` Day 66: session wrap-up
