@@ -99,10 +99,21 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
         return f"[ERROR] {e}"
     # Clamp timeout to reasonable range — LLM could send absurd values
     timeout = max(1, min(timeout, 600))
+    # Coerce command to str up front, rejecting non-strings. LLMs sometimes
+    # send command as a list (e.g. {"command": ["echo","hi"]}) — a very common
+    # JSON mistake. With shell=True, subprocess.run silently uses only list[0]
+    # and ignores the rest, producing empty output with NO error signal, so the
+    # LLM can't tell its args were malformed. An int/dict produces a cryptic
+    # "'int' object is not iterable" or runs garbage. Reject all non-strings
+    # with a param-named error instead.
+    try:
+        command = _to_str(command, "command")
+    except ValueError as e:
+        return f"[ERROR] {e}"
     # Reject empty/whitespace commands up front. Without this, subprocess.run("")
     # succeeds with empty output, and the LLM can't tell whether the command
     # ran with no output or was never valid — leading to confused retries.
-    if not command or not str(command).strip():
+    if not command or not command.strip():
         return "[ERROR] Empty command — nothing to run"
     # Resolve workdir up front. If workdir is invalid, subprocess.run raises
     # FileNotFoundError ([Errno 2]) or NotADirectoryError ([Errno 20]) with
