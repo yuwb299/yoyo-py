@@ -489,6 +489,13 @@ def tool_search(
     Returns:
         Matching lines with file paths and line numbers.
     """
+    # Coerce pattern to str up front — a non-string pattern (int, list) leaks
+    # a cryptic pathlib/subprocess error with no param name. None falls through
+    # to the empty-pattern check below with a clear message.
+    try:
+        pattern = _to_str(pattern, "pattern")
+    except ValueError as e:
+        return f"[ERROR] {e}"
     # Coerce numeric params — LLMs sometimes send them as strings, which
     # crashes the max() clamps below with a cryptic TypeError.
     try:
@@ -738,6 +745,10 @@ def tool_glob(pattern: str, path: str = ".", max_results: int = 100, show_sizes:
         List of matching file paths, sorted alphabetically.
     """
     try:
+        # Coerce pattern to str up front — a non-string pattern (int, list,
+        # None) crashes inside pathlib.glob with a cryptic "'int' object is
+        # not subscriptable", leaking Python internals with no param name.
+        pattern = _to_str(pattern, "pattern")
         # Coerce then clamp max_results. LLMs sometimes send it as a string;
         # max() on a str crashes with a cryptic TypeError.
         max_results = max(1, _to_int(max_results, "max_results", default=100))
