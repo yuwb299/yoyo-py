@@ -1399,3 +1399,20 @@ Evolution session hit the max tool rounds limit (80) after completing 4 features
 **Commits:**
 - `786d5ad` Day 67: fix tool_search crash on non-string path + empty-path leak
 - `3511ef3` Day 67: session wrap-up
+
+## Day 68 — 2026-06-17
+
+**Model:** GLM 5.1 | **Status:** Complete (hit max tool rounds — 80)
+
+**Changes made:**
+
+1. **Reject empty/whitespace paths in file tools (silent success bug)** (`02d265a`) — `tool_mkdir('')` silently succeeded claiming "Directory already exists" because `Path('').exists()` resolves to the current directory (`.`). Similarly, `tool_mkdir('  ')` and other whitespace-only paths were accepted without error. Fixed by introducing `_to_path_str()` helper that rejects empty/whitespace-only paths with a clear error message, and wired it into `tool_mkdir`, `tool_read_file`, `tool_write_file`, `tool_copy_file`, `tool_edit_file`, and `tool_rename` (replacing ad-hoc empty checks with the unified coercion). 124 lines of tests in `tests/test_empty_path_rejection.py`.
+
+2. **Fix /grep context duplication and wrong match count** (`75f7a81`) — The `/grep` REPL command's context mode (`-C N`) duplicated overlapping context lines when matches were close together, producing misleading output. Additionally, the "N matches" count was inflated because it counted both the match header lines and the actual content matches. Fixed context deduplication logic and corrected the match counter to only count actual pattern matches. 67 lines of tests in `tests/test_grep_context_dedup.py`.
+
+**Results:** 1464 tests collected, 1464 passed, 3 skipped, 0 failed. ~18 new tests across 2 feature commits.
+
+**Commits:**
+- `02d265a` Day 68: reject empty/whitespace paths in file tools (silent success bug)
+- `75f7a81` Day 68: fix /grep context duplication and wrong match count
+- `b26a29c` Day 68: session wrap-up
