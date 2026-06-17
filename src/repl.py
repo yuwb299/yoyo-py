@@ -4313,13 +4313,21 @@ def _run_grep(args: str) -> str:
     results = []
     cwd = Path(os.getcwd())
     max_results = 50
+    match_count = 0  # Real matches only — context lines don't count.
+    # Dedupe displayed lines by (path, line_num). Without this, an adjacent
+    # match printed as context for one match gets printed AGAIN as its own
+    # match, so the same line shows up twice (and the match count is wrong).
+    seen: set[tuple[str, int]] = set()
+    # Hard cap on displayed lines so context expansion can't push output far
+    # past max_results. Match-finding still stops at max_results *matches*.
+    max_display = max_results * (1 + 2 * context_lines) if context_lines > 0 else max_results
 
     for root, dirs, files in os.walk(cwd):
         # Skip ignored directories
         dirs[:] = [d for d in dirs if d not in skip_dirs and not d.startswith(".")]
 
         for fname in sorted(files):
-            if len(results) >= max_results:
+            if match_count >= max_results:
                 break
 
             fpath = Path(root) / fname
@@ -4341,35 +4349,59 @@ def _run_grep(args: str) -> str:
 
             rel_path = fpath.relative_to(cwd)
             for line_num, line in enumerate(lines, 1):
-                if len(results) >= max_results:
+                if match_count >= max_results:
                     break
                 if re.search(pattern, line, flags):
-                    # Truncate long lines
-                    display_line = line.strip()
-                    if len(display_line) > 120:
-                        display_line = display_line[:117] + "..."
-                    results.append(f"{DIM}{rel_path}{RESET}:{GREEN}{line_num}{RESET}:{display_line}")
+                    # A real match — count it for the header.
+                    match_count += 1
 
-                    # Show context lines around the match
+                    # Show context lines around the match, then the match
+                    # itself. Order context-then-match so overlapping matches
+                    # dedupe cleanly: if line N was already shown (as context
+                    # for a prior match), it's skipped here and the new match
+                    # just isn't re-rendered. We emit in ascending line order
+                    # to keep output readable.
                     if context_lines > 0:
                         for offset in range(-context_lines, context_lines + 1):
-                            if offset == 0:
-                                continue  # Already added the match line
                             ctx_num = line_num + offset
-                            if 1 <= ctx_num <= len(lines):
-                                ctx_line = lines[ctx_num - 1].strip()
-                                if len(ctx_line) > 120:
-                                    ctx_line = ctx_line[:117] + "..."
-                                results.append(f"{DIM}  {rel_path}:{ctx_num}:  {ctx_line}{RESET}")
+                            if not (1 <= ctx_num <= len(lines)):
+                                continue
+                            key = (str(rel_path), ctx_num)
+                            if key in seen:
+                                continue
+                            seen.add(key)
+                            if len(results) >= max_display:
+                                break
+                            ctx_line = lines[ctx_num - 1].strip()
+                            if len(ctx_line) > 120:
+                                ctx_line = ctx_line[:117] + "..."
+                            if offset == 0:
+                                results.append(
+                                    f"{DIM}{rel_path}{RESET}:{GREEN}{ctx_num}{RESET}:{ctx_line}"
+                                )
+                            else:
+                                results.append(
+                                    f"{DIM}  {rel_path}:{ctx_num}:  {ctx_line}{RESET}"
+                                )
+                    else:
+                        key = (str(rel_path), line_num)
+                        if key not in seen:
+                            seen.add(key)
+                            display_line = line.strip()
+                            if len(display_line) > 120:
+                                display_line = display_line[:117] + "..."
+                            results.append(
+                                f"{DIM}{rel_path}{RESET}:{GREEN}{line_num}{RESET}:{display_line}"
+                            )
 
     if not results:
         return f"{DIM}No matches found for '{pattern}'{RESET}"
 
     truncated = ""
-    if len(results) >= max_results:
-        truncated = f"\n{DIM}  ... (truncated at {max_results} results){RESET}"
+    if match_count >= max_results:
+        truncated = f"\n{DIM}  ... (truncated at {max_results} matches){RESET}"
 
-    header = f"{BOLD}Grep Results{RESET} ({len(results)} match{'es' if len(results) != 1 else ''} for '{pattern}')"
+    header = f"{BOLD}Grep Results{RESET} ({match_count} match{'es' if match_count != 1 else ''} for '{pattern}')"
     return header + "\n" + "\n".join(results) + truncated
 
 
