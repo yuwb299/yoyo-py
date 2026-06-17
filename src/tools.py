@@ -78,6 +78,23 @@ def _to_str(value: Any, name: str) -> str:
     raise ValueError(f"{name} must be a string, got {type(value).__name__}")
 
 
+def _to_path_str(value: Any, name: str) -> str:
+    """Coerce a tool parameter to a non-empty path string.
+
+    Like _to_str, but additionally rejects empty / whitespace-only strings.
+    This matters for path params because of a pathlib trap: Path("").exists()
+    resolves to the current directory ("."), so an empty path SILENTLY SUCCEEDS
+    on existence checks. Pre-fix, tool_mkdir("") returned "[OK] Directory
+    already exists:" — the agent believed it had created a directory when it
+    had done nothing at all. An empty path is never valid intent for a path
+    argument, so reject it up front with a param-named, actionable message.
+    """
+    s = _to_str(value, name)
+    if not s or not s.strip():
+        raise ValueError(f"{name} must be a non-empty path, got an empty string")
+    return s
+
+
 # Common truthy/falsy string spellings the LLM may send. Python's bool()
 # treats "false" and "0" as truthy (any non-empty string), which silently
 # corrupts files: edit_file with replace_all="false" replaces ALL matches.
@@ -242,7 +259,7 @@ def tool_read_file(path: str, offset: int = 1, limit: int = 500) -> str:
     # Coerce path to str — a non-string path (int, list, None) leaks pathlib's
     # "expected str, bytes or os.PathLike object" with no param name.
     try:
-        path = _to_str(path, "path")
+        path = _to_path_str(path, "path")
     except ValueError as e:
         return f"[ERROR] {e}"
     limit = min(limit, 2000)
@@ -381,9 +398,11 @@ def tool_write_file(path: str, content: str) -> str:
         # Validate content type up front — pathlib.write_text's error
         # ("data must be str, not int") doesn't name which argument failed.
         content = _to_str(content, "content")
-        # Coerce path to str — a non-string path leaks pathlib's "expected
-        # str, bytes or os.PathLike object" with no param name.
-        path = _to_str(path, "path")
+        # Coerce path to a non-empty path string — a non-string path leaks
+        # pathlib's "expected str, bytes or os.PathLike object" with no param
+        # name; an empty path resolves to cwd and silently overwrites the
+        # wrong target (or fails cryptically as "Is a directory").
+        path = _to_path_str(path, "path")
         p = Path(path)
         # Back up existing file before overwriting — safety net for LLM mistakes
         _backup_file(p)
@@ -413,10 +432,12 @@ def tool_mkdir(path: str, parents: bool = True) -> str:
             parents = _to_bool(parents, "parents")
         except ValueError as e:
             return f"[ERROR] {e}"
-        # Coerce path to str — a non-string path leaks pathlib's "expected
-        # str, bytes or os.PathLike object" with no param name.
+        # Coerce path to a non-empty path string — a non-string path leaks
+        # pathlib's "expected str, bytes or os.PathLike object" with no param
+        # name; an empty path resolves to cwd (".") and silently reports
+        # "Directory already exists" even though nothing was created.
         try:
-            path = _to_str(path, "path")
+            path = _to_path_str(path, "path")
         except ValueError as e:
             return f"[ERROR] {e}"
         p = Path(path)
@@ -450,10 +471,12 @@ def tool_copy_file(source: str, destination: str) -> str:
     """
     try:
         import shutil
-        # Coerce path args — a non-string source/destination leaks pathlib's
-        # "expected str, bytes or os.PathLike object" with no param name.
-        source = _to_str(source, "source")
-        destination = _to_str(destination, "destination")
+        # Coerce path args to non-empty path strings — a non-string
+        # source/destination leaks pathlib's "expected str, bytes or
+        # os.PathLike object" with no param name; an empty path resolves
+        # to cwd and would copy/move the wrong target.
+        source = _to_path_str(source, "source")
+        destination = _to_path_str(destination, "destination")
         src = Path(source)
         dst = Path(destination)
 
@@ -504,9 +527,10 @@ def tool_edit_file(path: str, old_string: str, new_string: str, replace_all: boo
         # ("argument 2 must be str, not list") doesn't name which param.
         old_string = _to_str(old_string, "old_string")
         new_string = _to_str(new_string, "new_string")
-        # Coerce path to str — a non-string path leaks pathlib's "expected
-        # str, bytes or os.PathLike object" with no param name.
-        path = _to_str(path, "path")
+        # Coerce path to a non-empty path string — a non-string path leaks
+        # pathlib's "expected str, bytes or os.PathLike object" with no param
+        # name; an empty path resolves to cwd and would edit the wrong file.
+        path = _to_path_str(path, "path")
         # Coerce replace_all — LLMs sometimes send "false" as a string,
         # which Python treats as truthy, causing ALL occurrences to be
         # replaced instead of just one. Silent file corruption.
@@ -942,15 +966,12 @@ def tool_rename(source: str, destination: str) -> str:
         Confirmation or error message.
     """
     try:
-        # Coerce path args — a non-string source/destination leaks pathlib's
-        # "expected str, bytes or os.PathLike object" with no param name.
-        source = _to_str(source, "source")
-        destination = _to_str(destination, "destination")
-        if not source:
-            return "[ERROR] source path cannot be empty"
-        if not destination:
-            return "[ERROR] destination path cannot be empty"
-
+        # Coerce path args to non-empty path strings — a non-string
+        # source/destination leaks pathlib's "expected str, bytes or
+        # os.PathLike object" with no param name; an empty path resolves
+        # to cwd and would move the wrong thing.
+        source = _to_path_str(source, "source")
+        destination = _to_path_str(destination, "destination")
         src = Path(source)
         dst = Path(destination)
 
