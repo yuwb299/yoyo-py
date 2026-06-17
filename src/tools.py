@@ -184,6 +184,15 @@ def tool_bash(command: str, timeout: int = 120, workdir: str | None = None) -> s
     # ran with no output or was never valid — leading to confused retries.
     if not command or not command.strip():
         return "[ERROR] Empty command — nothing to run"
+    # Coerce workdir to str, rejecting non-strings. Without this, an int/list/
+    # dict workdir reaches Path(workdir) and leaks a cryptic "expected str,
+    # bytes or os.PathLike object" TypeError. Same coercion class as command
+    # above and as the path params in the file tools — workdir was missed.
+    if workdir is not None:
+        try:
+            workdir = _to_str(workdir, "workdir")
+        except ValueError as e:
+            return f"[ERROR] {e}"
     # Resolve workdir up front. If workdir is invalid, subprocess.run raises
     # FileNotFoundError ([Errno 2]) or NotADirectoryError ([Errno 20]) with
     # cryptic messages that the LLM can't interpret. Translate to clear
