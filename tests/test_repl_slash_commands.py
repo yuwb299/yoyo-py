@@ -17,8 +17,7 @@ class TestSlashCommitRouting:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = [
                 MagicMock(returncode=0, stdout="true\n"),
-                MagicMock(returncode=0, stdout="M\tfile.py\n"),
-                MagicMock(returncode=0, stdout=""),
+                MagicMock(returncode=0, stdout="M\tfile.py\n"),  # status --porcelain
                 MagicMock(returncode=0, stdout=""),
                 MagicMock(returncode=0, stdout="[main abc1234] my commit msg\n1 file changed\n"),
             ]
@@ -30,8 +29,7 @@ class TestSlashCommitRouting:
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = [
                 MagicMock(returncode=0, stdout="true\n"),
-                MagicMock(returncode=0, stdout="M\tfile.py\n"),
-                MagicMock(returncode=0, stdout=""),
+                MagicMock(returncode=0, stdout="M\tfile.py\n"),  # status --porcelain
                 MagicMock(returncode=0, stdout=""),
                 MagicMock(returncode=0, stdout="[main def5678] fix: handle edge case in parser\n"),
             ]

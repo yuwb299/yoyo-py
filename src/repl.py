@@ -1240,14 +1240,17 @@ def _git_commit(message: str) -> str:
     if check.returncode != 0:
         return "[ERROR] Not a git repo"
 
-    # Check for changes (staged or unstaged)
-    diff = _run_git("diff", "--name-status")
-    diff_cached = _run_git("diff", "--cached", "--name-status")
+    # Check for changes. We must include UNTRACKED files (newly created,
+    # not yet `git add`-ed). `git diff` and `git diff --cached` both ignore
+    # untracked files entirely, so a repo whose only change is a new file
+    # would incorrectly report "[No changes to commit]" and the file would
+    # never be committed. `git status --porcelain` lists everything including
+    # untracked files (prefixed `??`), so use it as the authoritative check.
+    porcelain = _run_git("status", "--porcelain")
+    if porcelain.returncode != 0:
+        return f"[ERROR] git status failed: {porcelain.stderr.strip()}"
 
-    if diff.returncode != 0 or diff_cached.returncode != 0:
-        return f"[ERROR] git diff failed: {diff.stderr.strip()}"
-
-    if not diff.stdout.strip() and not diff_cached.stdout.strip():
+    if not porcelain.stdout.strip():
         return "[No changes to commit]"
 
     # Stage all changes
