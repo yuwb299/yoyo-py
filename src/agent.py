@@ -358,6 +358,19 @@ class Agent:
                         parsed_calls.append((tc, tool_name, None,
                             f"Malformed JSON in tool arguments: {tool_args_str!r}"))
                         continue
+                # Reject valid-but-non-object JSON args. The OpenAI tool spec
+                # requires arguments to be a JSON OBJECT; some LLMs occasionally
+                # emit a JSON array ("[1,2]") or scalar ("42"/"null"/'"x"').
+                # json.loads happily parses these to a list/int/None, but the
+                # subsequent `func(**tool_args)` then crashes with Python's
+                # internal "argument after ** must be a mapping, not list" — a
+                # message that names neither the tool nor the fix. Catch it here
+                # and surface a clear, actionable error instead.
+                if not isinstance(tool_args, dict):
+                    parsed_calls.append((tc, tool_name, None,
+                        f"Tool arguments must be a JSON object ({{...}}), "
+                        f"got {type(tool_args).__name__}: {tool_args_str!r}"))
+                    continue
                 parsed_calls.append((tc, tool_name, tool_args, None))
 
             # ── Phase 2: Execute tools ──────────────────────────────
